@@ -16,7 +16,7 @@ function archiveMembers(path) {
     assert.equal(result.status, 0, result.stderr);
     return result.stdout.trim().split(/\r?\n/).sort();
   }
-  const command = "$archive = [IO.Compression.ZipFile]::OpenRead($env:SESSION_CURATE_TEST_ARCHIVE); try { $archive.Entries.FullName } finally { $archive.Dispose() }";
+  const command = "Add-Type -AssemblyName System.IO.Compression.FileSystem; $archive = [IO.Compression.ZipFile]::OpenRead($env:SESSION_CURATE_TEST_ARCHIVE); try { $archive.Entries.FullName } finally { $archive.Dispose() }";
   const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
     encoding: "utf8",
     env: { ...process.env, SESSION_CURATE_TEST_ARCHIVE: path },
