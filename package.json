@@ -1,0 +1,17 @@
+{
+  "name": "clean-session-curate",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@endorhq/capsule": "1.0.0"
+  },
+  "scripts": {
+    "find": "node scripts/find_repo_sessions.mjs",
+    "scrub": "node scripts/scrub_export_paths.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

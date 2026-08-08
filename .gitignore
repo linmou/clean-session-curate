@@ -1,0 +1,5 @@
+# Purpose: Keep dependencies, private audit evidence, and generated session exports out of Git.
+node_modules/
+audits/
+session-export/
+session-export.zip
