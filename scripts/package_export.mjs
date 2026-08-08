@@ -76,7 +76,8 @@ function powershell(command, environment, cwd) {
 function createArchive(members, output, exportDir) {
   if (process.platform === "win32") {
     const command = "$files = @(ConvertFrom-Json $env:SESSION_CURATE_FILES); Compress-Archive -LiteralPath $files -DestinationPath $env:SESSION_CURATE_OUTPUT -CompressionLevel Optimal";
-    powershell(command, { SESSION_CURATE_FILES: JSON.stringify(members), SESSION_CURATE_OUTPUT: output }, exportDir);
+    const sources = members.map((member) => join(exportDir, member));
+    powershell(command, { SESSION_CURATE_FILES: JSON.stringify(sources), SESSION_CURATE_OUTPUT: output }, exportDir);
     return "powershell";
   }
   execFileSync("zip", ["-q", output, ...members], { cwd: exportDir, stdio: "ignore" });
