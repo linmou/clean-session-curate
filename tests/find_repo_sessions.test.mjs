@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,11 +23,13 @@ function hash(path) {
 
 function fixture() {
   const workspace = mkdtempSync(join(tmpdir(), "session-curate-discovery-"));
-  const repo = join(workspace, "repo");
-  const nested = join(repo, "packages", "api");
+  const repoPath = join(workspace, "repo");
+  const nestedPath = join(repoPath, "packages", "api");
   const home = join(workspace, "home");
-  mkdirSync(nested, { recursive: true });
-  execFileSync("git", ["init", "--quiet", repo]);
+  mkdirSync(nestedPath, { recursive: true });
+  execFileSync("git", ["init", "--quiet", repoPath]);
+  const repo = realpathSync.native(repoPath);
+  const nested = realpathSync.native(nestedPath);
   return { workspace, repo, nested, home };
 }
 
