@@ -106,13 +106,19 @@ function main() {
   if (!statSync(exportDir).isDirectory() || output !== join(dirname(exportDir), "session-export.zip")) throw new Error("Invalid export or archive location.");
   if (existsSync(output)) throw new Error("The output archive already exists.");
   const members = validatedMembers(exportDir, root);
+  let engine;
   try {
-    const engine = createArchive(members, output, exportDir);
+    engine = createArchive(members, output, exportDir);
+  } catch {
+    if (existsSync(output)) unlinkSync(output);
+    throw new Error("Native archive creation failed.");
+  }
+  try {
     if (JSON.stringify(archiveMembers(output)) !== JSON.stringify([...members].sort())) throw new Error("Archive members do not match the export set.");
     process.stdout.write(`${JSON.stringify({ archive: basename(output), engine, files: members.length, platform: process.platform })}\n`);
   } catch {
     if (existsSync(output)) unlinkSync(output);
-    throw new Error("Native archive creation or validation failed.");
+    throw new Error("Native archive validation failed.");
   }
 }
 
