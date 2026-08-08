@@ -1,4 +1,4 @@
-<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English and Chinese. Updated: 2026-08-08. Implementation commit: 25e290a. -->
+<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English and Chinese. Updated: 2026-08-08. Implementation commit: 735e623. -->
 
 # Clean Session Curate / 会话清理与打包
 
