@@ -12,6 +12,6 @@
   "scripts": {
     "find": "node scripts/find_repo_sessions.mjs",
     "scrub": "node scripts/scrub_export_paths.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test"
   }
 }
