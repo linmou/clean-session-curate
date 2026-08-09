@@ -14,6 +14,13 @@ function commandWorks(command, args) {
   return result.status === 0;
 }
 
+function runNpm(args, options = {}) {
+  if (process.platform === "win32") {
+    return spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", ["npm", ...args].join(" ")], options);
+  }
+  return spawnSync("npm", args, options);
+}
+
 function report(name, ready) {
   console.log(`${name}: ${ready ? "ok" : "missing"}`);
   return ready;
@@ -31,7 +38,7 @@ function capsuleVersion() {
 function checkSystem() {
   const checks = [];
   checks.push(report("node", Number(process.versions.node.split(".")[0]) >= 20));
-  checks.push(report("npm", commandWorks("npm", ["--version"])));
+  checks.push(report("npm", runNpm(["--version"], { stdio: "ignore" }).status === 0));
   checks.push(report("git", commandWorks("git", ["--version"])));
 
   if (process.platform === "win32") {
@@ -82,7 +89,7 @@ function main() {
   }
   if (installedVersion === CAPSULE_VERSION) return finish(true);
 
-  const install = spawnSync("npm", ["ci", "--ignore-scripts"], {
+  const install = runNpm(["ci", "--ignore-scripts"], {
     cwd: skillDir,
     encoding: "utf8",
     stdio: "ignore",
