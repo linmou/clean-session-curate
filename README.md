@@ -1,4 +1,4 @@
-<!-- Intent: 说明安装、使用、隐私边界和验证方式。中文为默认版本；英文版见 README.en.md。Updated: 2026-08-09. Implementation commit: 6571903. -->
+<!-- Intent: 说明安装、使用、隐私边界和验证方式。中文为默认版本；英文版见 README.en.md。Updated: 2026-08-09. Implementation commit: 7284ba2. -->
 
 # Harness 会话脱敏与打包
 
