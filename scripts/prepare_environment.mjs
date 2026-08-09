@@ -39,7 +39,6 @@ function checkSystem() {
   const checks = [];
   checks.push(report("node", Number(process.versions.node.split(".")[0]) >= 20));
   checks.push(report("npm", runNpm(["--version"], { stdio: "ignore" }).status === 0));
-  checks.push(report("git", commandWorks("git", ["--version"])));
 
   if (process.platform === "win32") {
     checks.push(report("powershell", commandWorks("powershell.exe", [

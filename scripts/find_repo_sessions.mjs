@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Select Capsule-compatible current-repository sessions without modifying source files.
+// Select Capsule-compatible target-folder sessions without modifying source files.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
@@ -26,21 +26,13 @@ function execCommand(command, args, options) {
   return execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", command, ...args], options);
 }
 
-function execGit(args, options) {
-  try {
-    return execFileSync("git", args, options);
-  } catch (error) {
-    if (process.platform !== "win32" || error?.code !== "ENOENT") throw error;
-    return execCommand("git", args, options);
-  }
-}
-
-function gitRoot() {
-  try {
-    return execGit(["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    throw new Error("Current directory is not inside a Git repository.");
-  }
+function targetFolder() {
+  const value = optionValue("--target");
+  if (value === undefined) throw new Error("Missing required option: --target <folder>.");
+  const lexical = resolve(value);
+  if (!existsSync(lexical)) throw new Error(`Target does not exist: ${lexical}`);
+  if (!statSync(lexical).isDirectory()) throw new Error(`Target is not a directory: ${lexical}`);
+  return { lexical, canonical: realpathSync.native(lexical) };
 }
 
 function sessionFiles(directory) {
@@ -64,10 +56,24 @@ function jsonLines(path) {
   return readFileSync(path, "utf8").split(/\r?\n/).filter((line) => line.trim()).map((line) => JSON.parse(line));
 }
 
-function isInsideRepository(candidate, repo) {
+function isLexicallyInside(candidate, target) {
   if (typeof candidate !== "string") return false;
-  const relation = relative(repo, resolve(candidate));
+  const relation = relative(target, candidate);
   return relation === "" || (!relation.startsWith("..") && !isAbsolute(relation));
+}
+
+function isInsideTarget(candidate, targets) {
+  if (typeof candidate !== "string") return false;
+  const lexicalCandidate = resolve(candidate);
+  if (existsSync(lexicalCandidate)) {
+    try {
+      if (!statSync(lexicalCandidate).isDirectory()) return false;
+      return isLexicallyInside(realpathSync.native(lexicalCandidate), targets.canonical);
+    } catch {
+      return false;
+    }
+  }
+  return isLexicallyInside(lexicalCandidate, targets.lexical) || isLexicallyInside(lexicalCandidate, targets.canonical);
 }
 
 function claudeCwd(records) {
@@ -91,19 +97,21 @@ function copilotCwd(records) {
   }
 }
 
-function geminiMatches(path, repo) {
+function geminiMatches(path, targets) {
   const root = JSON.parse(readFileSync(path, "utf8"));
-  return Array.isArray(root?.messages) && root.projectHash === createHash("sha256").update(repo).digest("hex");
+  if (!Array.isArray(root?.messages)) return false;
+  const hashes = [targets.lexical, targets.canonical].map((target) => createHash("sha256").update(target).digest("hex"));
+  return hashes.includes(root.projectHash);
 }
 
-function selectCandidate(agent, path, repo) {
-  if (agent === "gemini") return geminiMatches(path, repo);
+function selectCandidate(agent, path, targets) {
+  if (agent === "gemini") return geminiMatches(path, targets);
   const records = jsonLines(path);
   const cwd = agent === "claude" ? claudeCwd(records) : agent === "codex" ? codexCwd(records) : copilotCwd(records);
-  return isInsideRepository(cwd, repo);
+  return isInsideTarget(cwd, targets);
 }
 
-function openCodeSessions(repo) {
+function openCodeSessions(targets) {
   try {
     const options = { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] };
     const queryOptions = { ...options, maxBuffer: 64 * 1024 * 1024 };
@@ -113,7 +121,7 @@ function openCodeSessions(repo) {
     const sessions = [];
     let skipped = 0;
     for (const row of rows) {
-      if (typeof row?.id === "string" && row.id && isInsideRepository(row.directory, repo)) {
+      if (typeof row?.id === "string" && row.id && isInsideTarget(row.directory, targets)) {
         sessions.push({ agent: "opencode", path, sessionId: row.id });
       } else {
         skipped += 1;
@@ -127,25 +135,25 @@ function openCodeSessions(repo) {
 }
 
 function main() {
-  const repo = resolve(gitRoot());
+  const targets = targetFolder();
   const home = resolve(optionValue("--home") ?? homedir());
   let skipped = 0;
   const sessions = [];
   for (const [agent, root] of SESSION_ROOTS) {
     for (const path of sessionFiles(join(home, root))) {
       try {
-        if (selectCandidate(agent, path, repo)) sessions.push({ agent, path });
+        if (selectCandidate(agent, path, targets)) sessions.push({ agent, path });
         else skipped += 1;
       } catch {
         skipped += 1;
       }
     }
   }
-  const openCode = openCodeSessions(repo);
+  const openCode = openCodeSessions(targets);
   sessions.push(...openCode.sessions);
   skipped += openCode.skipped;
   sessions.sort((left, right) => left.agent.localeCompare(right.agent) || left.path.localeCompare(right.path) || (left.sessionId ?? "").localeCompare(right.sessionId ?? ""));
-  process.stdout.write(`${JSON.stringify({ repo, sessions, skipped })}\n`);
+  process.stdout.write(`${JSON.stringify({ target: targets.lexical, sessions, skipped })}\n`);
 }
 
 try {
