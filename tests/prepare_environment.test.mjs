@@ -2,7 +2,7 @@
 // Tests scripts/prepare_environment.mjs for safe prerequisite checks and local dependency preparation.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import test from "node:test";
@@ -34,6 +34,12 @@ function removeFixture(root) {
   rmSync(root, { recursive: true, force: true });
 }
 
+function installCapsule(root) {
+  const directory = join(root, "node_modules", "@endorhq", "capsule");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "package.json"), `${JSON.stringify({ version: "1.0.0" })}\n`);
+}
+
 function writeCommand(directory, name, body) {
   if (process.platform === "win32") {
     const path = join(directory, `${name}.cmd`);
@@ -51,11 +57,43 @@ test("reports a ready environment without depending on the caller's working dire
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /node: ok/i);
-  assert.match(result.stdout, /git: ok/i);
+  assert.doesNotMatch(result.stdout, /git:/i);
   assert.match(result.stdout, process.platform === "win32" ? /powershell: ok/i : /zip: ok/i);
   assert.match(result.stdout, /capsule: installed/i);
   assert.match(result.stdout, /environment: ready/i);
   assert.doesNotMatch(`${result.stdout}${result.stderr}`, new RegExp(skillDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+});
+
+// Tests scripts/prepare_environment.mjs for readiness with required tools present and Git unavailable.
+test("does not require or report Git during environment preparation", () => {
+  const isolated = fixture();
+  const commandDir = mkdtempSync(join(tmpdir(), "prepare-no-git-"));
+  installCapsule(isolated.root);
+  writeCommand(commandDir, "npm", "exit 0");
+  let path = commandDir;
+  if (process.platform === "win32") {
+    const powershell = spawnSync("where.exe", ["powershell.exe"], { encoding: "utf8" }).stdout.trim().split(/\r?\n/)[0];
+    assert.notEqual(powershell, "", "the integration test requires Windows PowerShell");
+    path = `${commandDir}${delimiter}${dirname(powershell)}`;
+  } else {
+    writeCommand(commandDir, "zip", "exit 0");
+    writeCommand(commandDir, "unzip", "exit 0");
+  }
+
+  const result = spawnSync(process.execPath, [isolated.script, "--check-only"], {
+    cwd: tmpdir(),
+    encoding: "utf8",
+    env: { ...process.env, PATH: path },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, /git:/i);
+  assert.match(result.stdout, /npm: ok/i);
+  assert.match(result.stdout, process.platform === "win32" ? /powershell: ok/i : /zip: ok[\s\S]*unzip: ok/i);
+  assert.match(result.stdout, /capsule: installed/i);
+  assert.match(result.stdout, /environment: ready/i);
+  removeFixture(commandDir);
+  removeFixture(isolated.root);
 });
 
 test("rejects unknown preparation options instead of silently changing setup behavior", () => {
@@ -134,20 +172,19 @@ test("missing system prerequisites stop before npm installation", () => {
     ? `if "%1"=="ci" echo yes>"${npmMarker}"`
     : `[ "$1" = "ci" ] && printf yes > "${npmMarker}"\nexit 0`;
   writeCommand(commandDir, "npm", npmMarkerCommand);
+  if (process.platform === "win32") cpSync(process.execPath, join(commandDir, "git.exe"));
+  else writeCommand(commandDir, "git", "exit 0");
   if (process.platform === "win32") {
-    const powershell = spawnSync("where.exe", ["powershell.exe"], { encoding: "utf8" }).stdout.trim().split(/\r?\n/)[0];
-    const path = [commandDir, powershell ? dirname(powershell) : ""].filter(Boolean).join(delimiter);
-    const result = spawnSync(process.execPath, [isolated.script], { encoding: "utf8", env: { ...process.env, PATH: path } });
+    const result = spawnSync(process.execPath, [isolated.script], { encoding: "utf8", env: { ...process.env, PATH: commandDir } });
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /git: missing/i);
+    assert.match(result.stdout, /powershell: missing/i);
     assert.equal(existsSync(npmMarker), false);
     assert.doesNotMatch(`${result.stdout}${result.stderr}`, new RegExp(isolated.root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   } else {
     writeCommand(commandDir, "zip", "exit 0");
-    writeCommand(commandDir, "unzip", "exit 0");
     const result = spawnSync(process.execPath, [isolated.script], { encoding: "utf8", env: { ...process.env, PATH: commandDir } });
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /git: missing/i);
+    assert.match(result.stdout, /unzip: missing/i);
     assert.equal(existsSync(npmMarker), false);
     assert.doesNotMatch(`${result.stdout}${result.stderr}`, new RegExp(isolated.root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   }

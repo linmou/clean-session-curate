@@ -4,16 +4,16 @@
 
 [English](README.en.md) | 中文
 
-创建本地去隐私、可上传的编程智能体会话归档，以便后续分析；只导出能够明确证明属于当前 Git 仓库的会话。
+创建本地去隐私、可上传的编程智能体会话归档，以便后续分析；只导出能够明确证明属于所选目标文件夹的会话。目标文件夹无需是 Git 仓库。
 
 ## 功能
 
 - 自动发现 Agent Harness 系统中的会话。原生支持 Capsule `1.0.0` 的格式包括 Claude Code、Codex、Copilot 和 Gemini。
-- 如果已安装 OpenCode，则通过其只读数据库命令自动发现当前仓库的 session；每条结果保留共享数据库路径和独立 `sessionId`，不会直接读取、复制或修改数据库/WAL 文件。
+- 如果已安装 OpenCode，则通过其只读数据库命令自动发现目标文件夹的 session；每条结果保留共享数据库路径和独立 `sessionId`，不会直接读取、复制或修改数据库/WAL 文件。
 - 使用开源的 [Capsule](https://github.com/endorhq/capsule) `1.0.0` 命令行工具（Apache-2.0 许可证），对每个会话的副本进行匿名化。
 - Capsule 的 `Select all` 选项会替换文件路径和 Git 身份等信息。例如，`/Users/alice/project/src/app.ts` 会变成 `/project/src/file1.ts`，私有分支会变成 `branch-1`，仓库 URL 会变成 `https://github.com/user/repo-1.git`。
 - 同一选项还会移除工具输出、文件内容、思考块、系统消息和 token 使用量元数据。
-- Capsule 不保证识别直接写入普通对话文本的任意密钥或个人信息；因此本流程还会清除仓库路径的不同写法，并在创建 ZIP 前验证清理后的导出内容。
+- Capsule 不保证识别直接写入普通对话文本的任意密钥或个人信息；因此本流程还会清除目标文件夹路径的不同写法，并在创建 ZIP 前验证清理后的导出内容。
 - OpenCode 等非原生格式按照文档中的 `Unsupported Formats` 转换流程处理：获得批准后，先用 `opencode export <sessionId>` 将 JSON 写入隔离临时目录，再转换为可供本技能处理的会话格式；原始数据库不会被改动或打包。
 - 最终生成清理后的 ZIP 归档。
 
@@ -27,27 +27,33 @@
 
 常见的用户级目录为：Codex 使用 `$CODEX_HOME/skills`（通常是 `~/.codex/skills`），Claude Code 使用 `~/.claude/skills`，OpenCode 使用 `~/.config/opencode/skills`。如果配置路径不同，智能体应遵循其当前官方文档。
 
-仓库本地的 npm 准备会自动进行。安装或升级 Node.js、Git、ZIP 工具、Homebrew 或任何其他系统软件则不同：智能体必须先展示准确命令，并在获得你的批准后才能执行。
+仓库本地的 npm 准备会自动进行。安装或升级 Node.js、ZIP 工具、Homebrew 或任何其他系统软件则不同：智能体必须先展示准确命令，并在获得你的批准后才能执行。Git 是可选项，只用于建议将当前仓库作为目标文件夹。
 
 ## 使用
 
-在目标仓库/文件夹中打开编程智能体或 Harness（例如 OpenCode、Codex），然后使用该技能：
+调用技能时可直接指定任意现有目录；明确指定即视为已确认。如果没有指定文件夹，技能会在 Git 可用且当前目录属于仓库时询问是否使用该仓库；否则会要求提供目标文件夹。选择并验证目录发生在环境准备和会话发现之前。
 
 ```text
-使用 $clean-session-curate 准备本仓库的编程智能体会话，以便上传。
+使用 $clean-session-curate 准备 /Users/alice/research-data 中的编程智能体会话，以便上传。
 ```
 
-它首先只读发现会话，并且只在创建脱敏数据前询问一次目标文件夹和 Harness 使用记录是否准确。
+发现命令可从任意工作目录运行：
+
+```text
+node "<skill-dir>/scripts/find_repo_sessions.mjs" --target "/Users/alice/research-data"
+```
+
+结果包含绝对路径 `target`、排序后的 `sessions` 和 `skipped`。Claude Code、Codex、Copilot 和 OpenCode 可匹配目标文件夹本身及其子目录；Gemini 只接受目标文件夹的精确哈希。
 
 ## 环境要求
 
-- Windows 10/11：Git、Node.js 20 或更高版本，以及带有 `Compress-Archive` 的 Windows PowerShell。
-- Linux/macOS：Git、Node.js 20 或更高版本、`zip` 和 `unzip`。
+- Windows 10/11：Node.js 20 或更高版本，以及带有 `Compress-Archive` 的 Windows PowerShell。
+- Linux/macOS：Node.js 20 或更高版本、`zip` 和 `unzip`。
 - 所有平台：npm 和锁定的 Capsule `1.0.0`；`npm run build` 会在需要时自动安装本地依赖。
 
 ## 输出
 
-验证完成后，目标仓库包含：
+验证完成后，目标文件夹包含：
 
 ```text
 session-export/
@@ -61,7 +67,7 @@ session-export.zip
 
 ## 隐私边界
 
-原始会话文件绝不会被修改、放入导出目录或加入 ZIP。无法证明项目归属的候选会话会被排除。流程会检查原始文件哈希未变化，并确保最终导出和归档中不再包含仓库路径变体。
+原始会话文件绝不会被修改、放入导出目录或加入 ZIP。无法证明目标文件夹归属的候选会话会被排除。流程会检查原始文件哈希未变化，并确保最终导出和归档中不再包含目标路径变体。
 
 ## 界面语言
 
@@ -73,10 +79,10 @@ Capsule `1.0.0` 没有受支持的界面语言设置。因此，该技能将清�
 npm run build
 ```
 
-这里的“构建”表示准备并验证；它不会创建二进制文件或分发包。测试套件覆盖环境准备、原生与 OpenCode 会话选择、OpenCode 数据库失败隔离、JSON/JSONL 路径清理、匿名连续命名、归档成员和归档完整性。GitHub Actions 会在 `ubuntu-latest`、`windows-latest` 和 `macos-latest` 的全新检出中运行这一新手工作流。所有平台都使用同一个已测试命令创建最终归档：
+这里的“构建”表示准备并验证；它不会创建二进制文件或分发包。测试套件覆盖 Git 可选的环境准备、显式非 Git 目标、原生与 OpenCode 的目标/子目录筛选、Gemini 精确哈希、无效目标错误、原始文件不变性、JSON/JSONL 路径清理、匿名连续命名、归档成员和归档完整性。GitHub Actions 会在 `ubuntu-latest`、`windows-latest` 和 `macos-latest` 的全新检出中运行这一新手工作流。所有平台都使用同一个已测试命令创建最终归档：
 
 ```text
-node "<skill-dir>/scripts/package_export.mjs" --root "<repo>" --export-dir "<repo>/session-export" --output "<repo>/session-export.zip"
+node "<skill-dir>/scripts/package_export.mjs" --root "<target-folder>" --export-dir "<target-folder>/session-export" --output "<target-folder>/session-export.zip"
 ```
 
 该命令在 Windows 上使用 PowerShell，在 Unix 上使用 `zip`/`unzip`；它会验证精确成员和完整性，并在原生创建或验证失败时删除本次生成的不完整归档。

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -26,25 +26,24 @@ function jsonLines(path) {
 }
 
 function fixture() {
-  const workspace = mkdtempSync(join(tmpdir(), "session-curate-discovery-"));
-  const repoPath = join(workspace, "repo");
-  const nestedPath = join(repoPath, "packages", "api");
+  const workspace = realpathSync.native(mkdtempSync(join(tmpdir(), "session-curate-discovery-")));
+  const targetPath = join(workspace, "target");
+  const nestedPath = join(targetPath, "packages", "api");
   const home = join(workspace, "home");
   mkdirSync(nestedPath, { recursive: true });
-  execFileSync("git", ["init", "--quiet", repoPath]);
-  const repo = realpathSync.native(repoPath);
+  const target = realpathSync.native(targetPath);
   const nested = realpathSync.native(nestedPath);
-  return { workspace, repo, nested, home };
+  return { workspace, target, nested, home };
 }
 
-function run(home, cwd, environment = {}) {
-  const result = runRaw(home, cwd, environment);
+function run(home, target, environment = {}, cwd = target) {
+  const result = runRaw(home, target, environment, cwd);
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout);
 }
 
-function runRaw(home, cwd, environment = {}) {
-  return spawnSync(process.execPath, [script, "--home", home], {
+function runRaw(home, target, environment = {}, cwd = target) {
+  return spawnSync(process.execPath, [script, "--target", target, "--home", home], {
     cwd,
     encoding: "utf8",
     maxBuffer: 128 * 1024 * 1024,
@@ -52,18 +51,9 @@ function runRaw(home, cwd, environment = {}) {
   });
 }
 
-function fakeGit(workspace) {
-  const bin = join(workspace, "git-only-bin");
+function unavailableOpenCodeBin(workspace) {
+  const bin = join(workspace, "empty-bin");
   mkdirSync(bin, { recursive: true });
-  const unixCommand = join(bin, "git");
-  writeFileSync(unixCommand, `#!/bin/sh
-# Return the fixture repository root while leaving OpenCode unavailable.
-printf '%s\\n' "$OPENCODE_TEST_REPO"
-`);
-  chmodSync(unixCommand, 0o755);
-  writeFileSync(join(bin, "git.cmd"), `@rem Return the fixture repository root while leaving OpenCode unavailable.
-@echo %OPENCODE_TEST_REPO%
-`);
   return bin;
 }
 
@@ -102,46 +92,129 @@ exec "${process.execPath}" "${implementation}" "$@"
   return bin;
 }
 
-test("selects recursively stored Capsule-native sessions and reports deterministic skipped candidates", () => {
-  const { workspace, repo, nested, home } = fixture();
-  const geminiHash = createHash("sha256").update(repo).digest("hex");
-  const claude = writeSession(home, ".claude/projects/deep/session.jsonl", `${JSON.stringify({ sessionId: "fixture-claude", type: "user", cwd: repo, message: "hi" })}\n`);
+function addFakeGit(bin) {
+  const unixCommand = join(bin, "git");
+  writeFileSync(unixCommand, `#!/bin/sh
+# Record obsolete Git discovery while returning the unrelated caller root.
+printf '%s\\n' "$*" >> "$GIT_TEST_LOG"
+printf '%s\\n' "$GIT_TEST_ROOT"
+`);
+  chmodSync(unixCommand, 0o755);
+  writeFileSync(join(bin, "git.cmd"), `@rem Record obsolete Git discovery while returning the unrelated caller root.
+@echo %*>>"%GIT_TEST_LOG%"
+@echo %GIT_TEST_ROOT%
+`);
+}
+
+// Tests scripts/find_repo_sessions.mjs for explicit non-Git target ownership, deterministic output, and read-only sources.
+test("discovers exact and descendant sessions for an explicit non-Git target from an unrelated directory", () => {
+  const { workspace, target, nested, home } = fixture();
+  const unrelatedPath = join(workspace, "caller");
+  const sibling = join(workspace, "target-sibling");
+  mkdirSync(unrelatedPath);
+  execFileSync("git", ["init", "--quiet", unrelatedPath]);
+  const unrelated = realpathSync.native(unrelatedPath);
+  const geminiHash = createHash("sha256").update(target).digest("hex");
+  const descendantGeminiHash = createHash("sha256").update(nested).digest("hex");
+  const claude = writeSession(home, ".claude/projects/deep/session.jsonl", `${JSON.stringify({ sessionId: "fixture-claude", type: "user", cwd: target, message: "hi" })}\n`);
+  const claudeDescendant = writeSession(home, ".claude/projects/deep/descendant.jsonl", `${JSON.stringify({ sessionId: "fixture-claude-descendant", type: "user", cwd: nested })}\n`);
+  const claudeSibling = writeSession(home, ".claude/projects/sibling.jsonl", `${JSON.stringify({ sessionId: "fixture-sibling", type: "user", cwd: sibling })}\n`);
+  const claudeOutside = writeSession(home, ".claude/projects/outside.jsonl", `${JSON.stringify({ sessionId: "fixture-claude-outside", type: "user", cwd: join(workspace, "outside") })}\n`);
   const codex = writeSession(home, ".codex/sessions/2026/08/rollout.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: nested } })}\n`);
+  const codexSibling = writeSession(home, ".codex/sessions/sibling.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: sibling } })}\n`);
+  const codexOutside = writeSession(home, ".codex/sessions/outside.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: join(workspace, "outside") } })}\n`);
+  const copilotExact = writeSession(home, ".copilot/session-state/exact/events.jsonl", `${JSON.stringify({ type: "session.start", data: { context: { cwd: target } } })}\n`);
   const copilot = writeSession(home, ".copilot/session-state/nested/events.jsonl", `${JSON.stringify({ type: "session.start", data: { context: { cwd: nested } } })}\n`);
+  const copilotSibling = writeSession(home, ".copilot/session-state/sibling/events.jsonl", `${JSON.stringify({ type: "session.start", data: { context: { cwd: sibling } } })}\n`);
   const gemini = writeSession(home, ".gemini/tmp/nested/session.json", JSON.stringify({ messages: [], projectHash: geminiHash }));
-  const nestedCwd = writeSession(home, ".codex/sessions/bad-nested.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli" }, other: { cwd: repo } })}\n`);
-  const wrongSignature = writeSession(home, ".claude/projects/nope.jsonl", `${JSON.stringify({ type: "user", cwd: repo, message: "not a session record" })}\n`);
+  const descendantGemini = writeSession(home, ".gemini/tmp/descendant.json", JSON.stringify({ messages: [], projectHash: descendantGeminiHash }));
+  const nestedCwd = writeSession(home, ".codex/sessions/bad-nested.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli" }, other: { cwd: target } })}\n`);
+  const wrongSignature = writeSession(home, ".claude/projects/nope.jsonl", `${JSON.stringify({ type: "user", cwd: target, message: "not a session record" })}\n`);
   const wrongProject = writeSession(home, ".copilot/session-state/wrong/events.jsonl", `${JSON.stringify({ type: "session.start", data: { context: { cwd: join(workspace, "outside") } } })}\n`);
   const malformed = writeSession(home, ".gemini/tmp/broken.json", "{");
-  const delayed = writeSession(home, ".codex/sessions/delayed.jsonl", `${" ".repeat(70_000)}${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: repo } })}\n`);
-  const ignoredExtension = writeSession(home, ".codex/sessions/ignored.txt", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: repo } })}\n`);
-  const sources = [claude, codex, copilot, gemini, nestedCwd, wrongSignature, wrongProject, malformed, delayed, ignoredExtension];
+  const delayed = writeSession(home, ".codex/sessions/delayed.jsonl", `${" ".repeat(70_000)}${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: target } })}\n`);
+  const ignoredExtension = writeSession(home, ".codex/sessions/ignored.txt", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: target } })}\n`);
+  const database = writeSession(workspace, "opencode.db", "immutable fixture database");
+  const log = writeSession(workspace, "opencode-invocations.jsonl", "");
+  const gitLog = writeSession(workspace, "git-invocations.txt", "");
+  const bin = fakeOpenCode(workspace);
+  addFakeGit(bin);
+  const rows = [
+    { id: "ses_z", directory: nested },
+    { id: "ses_sibling", directory: sibling },
+    { id: "ses_outside", directory: join(workspace, "outside") },
+    { id: "ses_a", directory: target },
+  ];
+  const sources = [claude, claudeDescendant, claudeSibling, claudeOutside, codex, codexSibling, codexOutside, copilotExact, copilot, copilotSibling, gemini, descendantGemini, nestedCwd, wrongSignature, wrongProject, malformed, delayed, ignoredExtension, database];
   const before = new Map(sources.map((path) => [path, hash(path)]));
+  const environment = {
+    PATH: `${bin}${delimiter}${process.env.PATH}`,
+    OPENCODE_TEST_DB: database,
+    OPENCODE_TEST_LOG: log,
+    OPENCODE_TEST_ROWS: JSON.stringify(rows),
+    GIT_TEST_LOG: gitLog,
+    GIT_TEST_ROOT: unrelated,
+  };
 
-  const output = run(home, nested, { PATH: fakeGit(workspace), OPENCODE_TEST_REPO: repo });
+  const output = run(home, target, environment, unrelated);
+  assert.deepEqual(jsonLines(log), [
+    ["db", "path"],
+    ["db", "SELECT id, directory FROM session", "--format", "json"],
+  ]);
+  for (const [path, sourceHash] of before) assert.equal(hash(path), sourceHash, path);
 
-  assert.equal(output.repo, repo);
+  writeFileSync(log, "");
+  const relativeOutput = run(home, relative(unrelated, target), environment, unrelated);
+  assert.deepEqual(jsonLines(log), [
+    ["db", "path"],
+    ["db", "SELECT id, directory FROM session", "--format", "json"],
+  ]);
+  for (const [path, sourceHash] of before) assert.equal(hash(path), sourceHash, path);
+  assert.deepEqual(relativeOutput, output);
+  assert.equal(readFileSync(gitLog, "utf8"), "", "discovery must not invoke Git when --target is supplied");
+
+  assert.deepEqual(Object.keys(output).sort(), ["sessions", "skipped", "target"]);
+  assert.equal(output.target, target);
+  assert.equal("repo" in output, false);
   assert.deepEqual(output.sessions, [
+    { agent: "claude", path: claudeDescendant },
     { agent: "claude", path: claude },
     { agent: "codex", path: codex },
     { agent: "codex", path: delayed },
+    { agent: "copilot", path: copilotExact },
     { agent: "copilot", path: copilot },
     { agent: "gemini", path: gemini },
+    { agent: "opencode", path: database, sessionId: "ses_a" },
+    { agent: "opencode", path: database, sessionId: "ses_z" },
   ]);
-  assert.equal(output.skipped, 4);
-  for (const [path, sourceHash] of before) assert.equal(hash(path), sourceHash, path);
+  assert.equal(output.skipped, 12);
 });
 
-test("fails outside a Git repository", () => {
-  const directory = mkdtempSync(join(tmpdir(), "session-curate-no-repo-"));
-  const noGit = spawnSync("node", [script, "--home", directory], { cwd: directory, encoding: "utf8" });
-  assert.notEqual(noGit.status, 0);
-  assert.match(noGit.stderr, /Git repository/i);
+// Tests scripts/find_repo_sessions.mjs for required, existing-directory target validation before discovery.
+test("rejects missing, nonexistent, and regular-file targets with clear errors", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "session-curate-target-errors-"));
+  const home = join(workspace, "home");
+  const nonexistent = join(workspace, "missing");
+  const regularFile = writeSession(workspace, "target.txt", "not a directory");
+
+  const missing = spawnSync(process.execPath, [script, "--home", home], { cwd: workspace, encoding: "utf8" });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /--target/i);
+
+  const absent = runRaw(home, nonexistent, {}, workspace);
+  assert.notEqual(absent.status, 0);
+  assert.match(absent.stderr, /target.*does not exist/i);
+  assert.match(absent.stderr, new RegExp(nonexistent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  const file = runRaw(home, regularFile, {}, workspace);
+  assert.notEqual(file.status, 0);
+  assert.match(file.stderr, /target.*not a directory/i);
+  assert.match(file.stderr, new RegExp(regularFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("discovers current-repository OpenCode sessions through its read-only database CLI", () => {
-  const { workspace, repo, nested, home } = fixture();
-  const native = writeSession(home, ".codex/sessions/native.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: repo } })}\n`);
+test("discovers target-folder OpenCode sessions through its read-only database CLI", () => {
+  const { workspace, target, nested, home } = fixture();
+  const native = writeSession(home, ".codex/sessions/native.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: target } })}\n`);
   const database = writeSession(workspace, "opencode.db", "immutable fixture database");
   const log = writeSession(workspace, "opencode-invocations.jsonl", "");
   const bin = fakeOpenCode(workspace);
@@ -149,10 +222,10 @@ test("discovers current-repository OpenCode sessions through its read-only datab
   const rows = [
     { id: "ses_z", directory: nested },
     { id: "ses_outside", directory: join(workspace, "outside") },
-    { id: "ses_a", directory: repo },
+    { id: "ses_a", directory: target },
   ];
 
-  const output = run(home, nested, {
+  const output = run(home, target, {
     PATH: `${bin}${delimiter}${process.env.PATH}`,
     OPENCODE_TEST_DB: database,
     OPENCODE_TEST_LOG: log,
@@ -172,11 +245,11 @@ test("discovers current-repository OpenCode sessions through its read-only datab
   assert.equal(hash(database), before);
 
   writeFileSync(log, "");
-  const malformedRow = run(home, nested, {
+  const malformedRow = run(home, target, {
     PATH: `${bin}${delimiter}${process.env.PATH}`,
     OPENCODE_TEST_DB: database,
     OPENCODE_TEST_LOG: log,
-    OPENCODE_TEST_ROWS: JSON.stringify([{ id: "", directory: repo }]),
+    OPENCODE_TEST_ROWS: JSON.stringify([{ id: "", directory: target }]),
   });
   assert.deepEqual(malformedRow.sessions, [{ agent: "codex", path: native }]);
   assert.equal(malformedRow.skipped, 1);
@@ -188,19 +261,19 @@ test("discovers current-repository OpenCode sessions through its read-only datab
 });
 
 // Tests large OpenCode query handling in tests/find_repo_sessions.test.mjs without passing giant data through the environment.
-test("discovers all current-repository OpenCode sessions when the query exceeds 1 MiB", () => {
-  const { workspace, repo, home } = fixture();
+test("discovers all target-folder OpenCode sessions when the query exceeds 1 MiB", () => {
+  const { workspace, target, home } = fixture();
   const database = writeSession(workspace, "opencode.db", "immutable fixture database");
   const log = writeSession(workspace, "opencode-invocations.jsonl", "");
   const bin = fakeOpenCode(workspace);
   const rowCount = 25_000;
   const before = hash(database);
 
-  const output = run(home, repo, {
+  const output = run(home, target, {
     PATH: `${bin}${delimiter}${process.env.PATH}`,
     OPENCODE_TEST_DB: database,
     OPENCODE_TEST_LOG: log,
-    OPENCODE_TEST_REPO: repo,
+    OPENCODE_TEST_REPO: target,
     OPENCODE_TEST_ROW_COUNT: String(rowCount),
   });
 
@@ -222,18 +295,18 @@ test("discovers all current-repository OpenCode sessions when the query exceeds 
 
 // Tests oversized-query diagnostics and native-session isolation in tests/find_repo_sessions.test.mjs.
 test("diagnoses an OpenCode query beyond the explicit buffer ceiling without failing discovery", () => {
-  const { workspace, repo, home } = fixture();
-  const native = writeSession(home, ".codex/sessions/native.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: repo } })}\n`);
+  const { workspace, target, home } = fixture();
+  const native = writeSession(home, ".codex/sessions/native.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: target } })}\n`);
   const database = writeSession(workspace, "opencode.db", "immutable fixture database");
   const log = writeSession(workspace, "opencode-invocations.jsonl", "");
   const bin = fakeOpenCode(workspace);
   const before = hash(database);
 
-  const result = runRaw(home, repo, {
+  const result = runRaw(home, target, {
     PATH: `${bin}${delimiter}${process.env.PATH}`,
     OPENCODE_TEST_DB: database,
     OPENCODE_TEST_LOG: log,
-    OPENCODE_TEST_REPO: repo,
+    OPENCODE_TEST_REPO: target,
     OPENCODE_TEST_ROW_COUNT: "500000",
     OPENCODE_TEST_ROW_PADDING: "64",
   });
@@ -247,20 +320,20 @@ test("diagnoses an OpenCode query beyond the explicit buffer ceiling without fai
 });
 
 test("keeps native discovery available when OpenCode database access fails", () => {
-  const { workspace, repo, home } = fixture();
-  const native = writeSession(home, ".codex/sessions/native.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: repo } })}\n`);
+  const { workspace, target, home } = fixture();
+  const native = writeSession(home, ".codex/sessions/native.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: target } })}\n`);
   const log = writeSession(workspace, "opencode-invocations.jsonl", "");
-  const missingOpenCodeBin = fakeGit(workspace);
+  const missingOpenCodeBin = unavailableOpenCodeBin(workspace);
 
-  const missingOpenCode = run(home, repo, {
+  const missingOpenCode = run(home, target, {
     PATH: missingOpenCodeBin,
-    OPENCODE_TEST_REPO: repo,
+    OPENCODE_TEST_REPO: target,
   });
   assert.deepEqual(missingOpenCode.sessions, [{ agent: "codex", path: native }]);
   assert.deepEqual(jsonLines(log), []);
 
   const bin = fakeOpenCode(workspace);
-  const malformedQuery = run(home, repo, {
+  const malformedQuery = run(home, target, {
     PATH: `${bin}${delimiter}${process.env.PATH}`,
     OPENCODE_TEST_DB: join(workspace, "opencode.db"),
     OPENCODE_TEST_LOG: log,
@@ -273,7 +346,7 @@ test("keeps native discovery available when OpenCode database access fails", () 
   ]);
 
   writeFileSync(log, "");
-  const failedQuery = run(home, repo, {
+  const failedQuery = run(home, target, {
     PATH: `${bin}${delimiter}${process.env.PATH}`,
     OPENCODE_TEST_DB: join(workspace, "opencode.db"),
     OPENCODE_TEST_LOG: log,
