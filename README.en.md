@@ -1,4 +1,4 @@
-<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English. The Chinese default version is README.md. Updated: 2026-08-09. Implementation commit: 95819a3. -->
+<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English. The Chinese default version is README.md. Updated: 2026-08-09. Implementation commit: 6571903. -->
 
 # Clean Session Curate
 
