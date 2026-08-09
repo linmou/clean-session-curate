@@ -1,4 +1,4 @@
-<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English and Chinese. Updated: 2026-08-08. Implementation commit: 735e623. -->
+<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English and Chinese. Updated: 2026-08-09. Implementation commit: 95819a3. -->
 
 # Clean Session Curate / 会话清理与打包
 
@@ -36,27 +36,31 @@ Use $clean-session-curate to prepare this repository's agent sessions for upload
 
 ## Install With an AI Agent / 使用 AI 智能体安装
 
-Give the repository URL to Codex, Claude Code, or OpenCode and ask it to clone the repository as `clean-session-curate` in its documented user-level skill directory, run `npm ci` in that directory, and verify `SKILL.md`. No installer script is needed.
+Give only the GitHub URL to Codex, Claude Code, or OpenCode and ask it to install the skill. The agent clones it as `clean-session-curate` in the documented user-level skill directory and runs `npm run build`. That one command checks the environment, automatically installs the pinned repository-local Capsule dependency when needed, and runs every test. No standalone installer or binary is needed.
 
-将仓库链接交给 Codex、Claude Code 或 OpenCode，并要求它把仓库以 `clean-session-curate` 名称克隆到该智能体文档规定的用户级技能目录，在该目录运行 `npm ci`，然后验证 `SKILL.md`。无需安装器脚本。
+只需将 GitHub 链接交给 Codex、Claude Code 或 OpenCode，并要求它安装该技能。智能体会将仓库以 `clean-session-curate` 名称克隆到文档规定的用户级技能目录，并运行 `npm run build`。这一个命令会检查环境、在需要时自动安装锁定的仓库本地 Capsule 依赖，并运行全部测试。无需独立安装器或二进制文件。
 
 ```text
-Install this skill from https://github.com/linmou/clean-session-curate.git in your user-level skills directory, install its pinned npm dependency, validate it, and report the installed path.
+Install this skill from https://github.com/linmou/clean-session-curate.git in your user-level skills directory, run its build, and report whether it is ready.
 ```
 
 Common user-level locations are `$CODEX_HOME/skills` (normally `~/.codex/skills`) for Codex, `~/.claude/skills` for Claude Code, and `~/.config/opencode/skills` for OpenCode. The agent should follow its current official documentation when a configured location differs.
 
 常见的用户级目录为：Codex 使用 `$CODEX_HOME/skills`（通常是 `~/.codex/skills`），Claude Code 使用 `~/.claude/skills`，OpenCode 使用 `~/.config/opencode/skills`。如果配置路径不同，智能体应遵循其当前官方文档。
 
+Repository-local npm preparation is automatic. Installing or upgrading Node.js, Git, ZIP tools, Homebrew, or any other system software is different: the agent must show the exact command and obtain your approval before running it.
+
+仓库本地的 npm 准备会自动进行。安装或升级 Node.js、Git、ZIP 工具、Homebrew 或任何其他系统软件则不同：智能体必须先展示准确命令，并在获得你的批准后才能执行。
+
 ## Requirements / 环境要求
 
 - Windows 10/11: Git, Node.js 20 or later, and Windows PowerShell with `Compress-Archive`.
 - Linux/macOS: Git, Node.js 20 or later, `zip`, and `unzip`.
-- All platforms: run `npm ci` once in the skill directory to install pinned Capsule `1.0.0`.
+- All platforms: npm and pinned Capsule `1.0.0`; `npm run build` installs the local dependency automatically when needed.
 
 - Windows 10/11：Git、Node.js 20 或更高版本，以及带有 `Compress-Archive` 的 Windows PowerShell。
 - Linux/macOS：Git、Node.js 20 或更高版本、`zip` 和 `unzip`。
-- 所有平台：在技能目录中运行一次 `npm ci`，安装锁定的 Capsule `1.0.0`。
+- 所有平台：npm 和锁定的 Capsule `1.0.0`；`npm run build` 会在需要时自动安装本地依赖。
 
 ## Output / 输出
 
@@ -90,13 +94,13 @@ Capsule `1.0.0` 没有受支持的界面语言设置。因此，该技能将清�
 
 ## Verify / 验证
 
-```text
-npm test
+```shell
+npm run build
 ```
 
-The test suite covers native session selection, JSON/JSONL path scrubbing, contiguous anonymous names, archive membership, and archive integrity. GitHub Actions runs it on `ubuntu-latest` and `windows-latest`. Final archive creation uses the same tested command on every platform:
+Here, “build” means prepare and verify; it does not create a binary or distributable. The test suite covers environment preparation, native session selection, JSON/JSONL path scrubbing, contiguous anonymous names, archive membership, and archive integrity. GitHub Actions runs this novice workflow from a fresh checkout on `ubuntu-latest`, `windows-latest`, and `macos-latest`. Final archive creation uses the same tested command on every platform:
 
-测试套件覆盖原生会话选择、JSON/JSONL 路径清理、匿名连续命名、归档成员和归档完整性。GitHub Actions 会在 `ubuntu-latest` 与 `windows-latest` 上运行测试。所有平台都使用同一个已测试命令创建最终归档：
+这里的“构建”表示准备并验证；它不会创建二进制文件或分发包。测试套件覆盖环境准备、原生会话选择、JSON/JSONL 路径清理、匿名连续命名、归档成员和归档完整性。GitHub Actions 会在 `ubuntu-latest`、`windows-latest` 和 `macos-latest` 的全新检出中运行这一新手工作流。所有平台都使用同一个已测试命令创建最终归档：
 
 ```text
 node "<skill-dir>/scripts/package_export.mjs" --root "<repo>" --export-dir "<repo>/session-export" --output "<repo>/session-export.zip"
