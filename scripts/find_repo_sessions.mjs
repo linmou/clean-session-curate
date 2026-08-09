@@ -26,9 +26,18 @@ function execCommand(command, args, options) {
   return execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", command, ...args], options);
 }
 
+function execGit(args, options) {
+  try {
+    return execFileSync("git", args, options);
+  } catch (error) {
+    if (process.platform !== "win32" || error?.code !== "ENOENT") throw error;
+    return execCommand("git", args, options);
+  }
+}
+
 function gitRoot() {
   try {
-    return execCommand("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execGit(["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   } catch {
     throw new Error("Current directory is not inside a Git repository.");
   }

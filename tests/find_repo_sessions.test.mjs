@@ -52,6 +52,17 @@ function runRaw(home, cwd, environment = {}) {
   });
 }
 
+function runAsPlatform(home, cwd, platform, environment = {}) {
+  const shim = join(cwd, `.platform-${platform}.cjs`);
+  writeFileSync(shim, `Object.defineProperty(process, "platform", { value: ${JSON.stringify(platform)} });\n`);
+  return spawnSync(process.execPath, ["--require", shim, script, "--home", home], {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 128 * 1024 * 1024,
+    env: { ...process.env, ...environment },
+  });
+}
+
 function fakeGit(workspace) {
   const bin = join(workspace, "git-only-bin");
   mkdirSync(bin, { recursive: true });
@@ -62,6 +73,15 @@ printf '%s\\n' "$OPENCODE_TEST_REPO"
 `);
   chmodSync(unixCommand, 0o755);
   writeFileSync(join(bin, "git.cmd"), `@rem Return the fixture repository root while leaving OpenCode unavailable.
+@echo %OPENCODE_TEST_REPO%
+`);
+  return bin;
+}
+
+function fakeGitCmdOnly(workspace) {
+  const bin = join(workspace, "git-cmd-only-bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, "git.cmd"), `@rem Return the fixture repository root if a broad shell fallback invokes this shim.
 @echo %OPENCODE_TEST_REPO%
 `);
   return bin;
@@ -137,6 +157,32 @@ test("fails outside a Git repository", () => {
   const noGit = spawnSync("node", [script, "--home", directory], { cwd: directory, encoding: "utf8" });
   assert.notEqual(noGit.status, 0);
   assert.match(noGit.stderr, /Git repository/i);
+});
+
+// Tests the Windows Git branch without cmd.exe in tests/find_repo_sessions.test.mjs; this protects UNC working directories.
+test("uses direct Git discovery before the Windows shell fallback", () => {
+  const { repo, home } = fixture();
+  const result = runAsPlatform(home, repo, "win32", { ComSpec: process.execPath });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.repo, repo);
+  assert.deepEqual(output.sessions, []);
+  assert.equal(output.skipped, 0);
+});
+
+// Tests that only ENOENT permits Git's Windows shell fallback in tests/find_repo_sessions.test.mjs.
+test("does not shell-fallback after Git reports a repository error", () => {
+  const { workspace, repo, home } = fixture();
+  const outside = join(workspace, "outside");
+  mkdirSync(outside);
+  const bin = fakeGitCmdOnly(workspace);
+  const result = runRaw(home, outside, {
+    PATH: `${bin}${delimiter}${process.env.PATH}`,
+    OPENCODE_TEST_REPO: repo,
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Git repository/i);
 });
 
 test("discovers current-repository OpenCode sessions through its read-only database CLI", () => {
