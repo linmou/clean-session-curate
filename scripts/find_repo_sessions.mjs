@@ -21,9 +21,14 @@ function optionValue(name) {
   return value;
 }
 
+function execCommand(command, args, options) {
+  if (process.platform !== "win32") return execFileSync(command, args, options);
+  return execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", command, ...args], options);
+}
+
 function gitRoot() {
   try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execCommand("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   } catch {
     throw new Error("Current directory is not inside a Git repository.");
   }
@@ -92,8 +97,9 @@ function selectCandidate(agent, path, repo) {
 function openCodeSessions(repo) {
   try {
     const options = { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] };
-    const path = execFileSync("opencode", ["db", "path"], options).trim();
-    const rows = JSON.parse(execFileSync("opencode", ["db", "SELECT id, directory FROM session", "--format", "json"], options));
+    const queryOptions = { ...options, maxBuffer: 64 * 1024 * 1024 };
+    const path = execCommand("opencode", ["db", "path"], options).trim();
+    const rows = JSON.parse(execCommand("opencode", ["db", "SELECT id, directory FROM session", "--format", "json"], queryOptions));
     if (!path || !Array.isArray(rows)) return { sessions: [], skipped: 0 };
     const sessions = [];
     let skipped = 0;
@@ -105,7 +111,8 @@ function openCodeSessions(repo) {
       }
     }
     return { sessions, skipped };
-  } catch {
+  } catch (error) {
+    if (error?.code === "ENOBUFS") process.stderr.write("OpenCode session query exceeded the 64 MiB maxBuffer (ENOBUFS); skipping OpenCode sessions.\n");
     return { sessions: [], skipped: 0 };
   }
 }

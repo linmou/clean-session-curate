@@ -38,9 +38,18 @@ function fixture() {
 }
 
 function run(home, cwd, environment = {}) {
-  const result = spawnSync(process.execPath, [script, "--home", home], { cwd, encoding: "utf8", env: { ...process.env, ...environment } });
+  const result = runRaw(home, cwd, environment);
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout);
+}
+
+function runRaw(home, cwd, environment = {}) {
+  return spawnSync(process.execPath, [script, "--home", home], {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 128 * 1024 * 1024,
+    env: { ...process.env, ...environment },
+  });
 }
 
 function fakeGit(workspace) {
@@ -69,6 +78,16 @@ appendFileSync(process.env.OPENCODE_TEST_LOG, JSON.stringify(process.argv.slice(
 if (process.argv[3] === "path") process.stdout.write(process.env.OPENCODE_TEST_DB + "\\n");
 else if (process.env.OPENCODE_TEST_QUERY_FAILURE === "1") process.exit(1);
 else if (process.env.OPENCODE_TEST_BAD_QUERY === "1") process.stdout.write("not-json");
+else if (process.env.OPENCODE_TEST_ROW_COUNT) {
+  const rowCount = Number(process.env.OPENCODE_TEST_ROW_COUNT);
+  const rowPadding = "x".repeat(Number(process.env.OPENCODE_TEST_ROW_PADDING ?? 0));
+  const rows = Array.from({ length: rowCount }, (_, index) => ({
+    id: "ses_" + String(rowCount - index).padStart(5, "0"),
+    directory: process.env.OPENCODE_TEST_REPO,
+    ...(rowPadding ? { padding: rowPadding } : {}),
+  }));
+  process.stdout.write(JSON.stringify(rows));
+}
 else process.stdout.write(process.env.OPENCODE_TEST_ROWS);
 `);
   const unixCommand = join(bin, "opencode");
@@ -165,6 +184,65 @@ test("discovers current-repository OpenCode sessions through its read-only datab
     ["db", "path"],
     ["db", "SELECT id, directory FROM session", "--format", "json"],
   ]);
+  assert.equal(hash(database), before);
+});
+
+// Tests large OpenCode query handling in tests/find_repo_sessions.test.mjs without passing giant data through the environment.
+test("discovers all current-repository OpenCode sessions when the query exceeds 1 MiB", () => {
+  const { workspace, repo, home } = fixture();
+  const database = writeSession(workspace, "opencode.db", "immutable fixture database");
+  const log = writeSession(workspace, "opencode-invocations.jsonl", "");
+  const bin = fakeOpenCode(workspace);
+  const rowCount = 25_000;
+  const before = hash(database);
+
+  const output = run(home, repo, {
+    PATH: `${bin}${delimiter}${process.env.PATH}`,
+    OPENCODE_TEST_DB: database,
+    OPENCODE_TEST_LOG: log,
+    OPENCODE_TEST_REPO: repo,
+    OPENCODE_TEST_ROW_COUNT: String(rowCount),
+  });
+
+  assert.equal(output.sessions.length, rowCount);
+  for (let index = 0; index < rowCount; index += 1) {
+    assert.deepEqual(output.sessions[index], {
+      agent: "opencode",
+      path: database,
+      sessionId: `ses_${String(index + 1).padStart(5, "0")}`,
+    });
+  }
+  assert.equal(output.skipped, 0);
+  assert.deepEqual(jsonLines(log), [
+    ["db", "path"],
+    ["db", "SELECT id, directory FROM session", "--format", "json"],
+  ]);
+  assert.equal(hash(database), before);
+});
+
+// Tests oversized-query diagnostics and native-session isolation in tests/find_repo_sessions.test.mjs.
+test("diagnoses an OpenCode query beyond the explicit buffer ceiling without failing discovery", () => {
+  const { workspace, repo, home } = fixture();
+  const native = writeSession(home, ".codex/sessions/native.jsonl", `${JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: repo } })}\n`);
+  const database = writeSession(workspace, "opencode.db", "immutable fixture database");
+  const log = writeSession(workspace, "opencode-invocations.jsonl", "");
+  const bin = fakeOpenCode(workspace);
+  const before = hash(database);
+
+  const result = runRaw(home, repo, {
+    PATH: `${bin}${delimiter}${process.env.PATH}`,
+    OPENCODE_TEST_DB: database,
+    OPENCODE_TEST_LOG: log,
+    OPENCODE_TEST_REPO: repo,
+    OPENCODE_TEST_ROW_COUNT: "500000",
+    OPENCODE_TEST_ROW_PADDING: "64",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.sessions, [{ agent: "codex", path: native }]);
+  assert.equal(output.skipped, 0);
+  assert.match(result.stderr, /OpenCode.*ENOBUFS|ENOBUFS.*OpenCode/i);
   assert.equal(hash(database), before);
 });
 
