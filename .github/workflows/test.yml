@@ -1,4 +1,4 @@
-# Purpose: Verify session discovery, scrubbing, and native ZIP packaging on supported operating systems.
+# Purpose: Verify automatic preparation and the complete suite on supported operating systems.
 name: Test
 
 on:
@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -18,5 +18,4 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
-      - run: npm test
+      - run: npm run build

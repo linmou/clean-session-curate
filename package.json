@@ -10,8 +10,11 @@
     "@endorhq/capsule": "1.0.0"
   },
   "scripts": {
+    "build": "npm run setup && npm test",
+    "check-env": "node scripts/prepare_environment.mjs --check-only",
     "find": "node scripts/find_repo_sessions.mjs",
     "scrub": "node scripts/scrub_export_paths.mjs",
+    "setup": "node scripts/prepare_environment.mjs",
     "test": "node --test"
   }
 }

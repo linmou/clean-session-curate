@@ -1,4 +1,4 @@
 interface:
   display_name: "Clean Session Curate"
   short_description: "Clean and zip current-repo sessions"
-  default_prompt: "Use $clean-session-curate to create a cleaned, language-tagged zip of this repository's agent sessions."
+  default_prompt: "Use $clean-session-curate to prepare its local environment automatically, then create a cleaned, language-tagged zip of this repository's agent sessions."

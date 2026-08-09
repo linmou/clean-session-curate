@@ -9,12 +9,13 @@ Create `session-export/` from sessions that can be proven to belong to the curre
 
 ## Discover
 
-1. Require Git, Node.js 20+, and the platform archive tools: PowerShell `Compress-Archive` on Windows, or `zip` and `unzip` on Unix. In this skill directory, run `npm ci` when the pinned dependencies are not installed. Set `TARGET_REPO` from `git rev-parse --show-toplevel`.
-2. Determine the active harness and installed version from the current runtime, executable metadata, environment, configuration, or installed package information. Do not infer it from arbitrary home-directory files.
-3. Compare the stored format with Capsule `1.0.0` support. A nominally supported harness with a newer incompatible format uses the conversion procedure below.
-4. For a compatible Claude Code, Codex, Copilot, or Gemini format, run `node "<skill>/scripts/find_repo_sessions.mjs"` from `TARGET_REPO`. It recursively discovers candidates under the current user's known roots, validates Capsule signatures, and returns `repo`, sorted `sessions`, and aggregate `skipped`.
-5. Gemini's Capsule format has `projectHash`, not a recoverable `cwd`; only an exact `sha256(TARGET_REPO)` match is provable. Exclude descendant Gemini launches.
-6. Discovery is read-only. State the selected count, nonzero aggregate skipped count, Capsule's `Select all` cleaning, raw-source preservation, and whether conversion copies are needed. Then ask exactly once: `Found N current-project sessions. Create cleaned upload copies?`
+1. Resolve this skill directory. Before invoking its Node preparation script, check that Node.js 20+ and npm are available. If either is missing or Node is too old, inspect the OS and available package manager, show the user the exact version-satisfying installation command, and obtain approval before running it. Never install system software, request elevation, or run a system package-manager command without that approval.
+2. Run `npm run build` in this skill directory. This checks Git and the platform archive tools (PowerShell `Compress-Archive` on Windows, or `zip` and `unzip` on Unix), automatically installs the locked repository-local Capsule dependency when needed, and runs all tests. Repository-local npm preparation needs no additional approval. If a system tool is missing, inspect the OS and package manager, show the exact installation command, ask once before running it, then rerun `npm run build`. Continue only after the build reports `environment: ready` and all tests pass. Set `TARGET_REPO` from `git rev-parse --show-toplevel`.
+3. Determine the active harness and installed version from the current runtime, executable metadata, environment, configuration, or installed package information. Do not infer it from arbitrary home-directory files.
+4. Compare the stored format with Capsule `1.0.0` support. A nominally supported harness with a newer incompatible format uses the conversion procedure below.
+5. For a compatible Claude Code, Codex, Copilot, or Gemini format, run `node "<skill>/scripts/find_repo_sessions.mjs"` from `TARGET_REPO`. It recursively discovers candidates under the current user's known roots, validates Capsule signatures, and returns `repo`, sorted `sessions`, and aggregate `skipped`.
+6. Gemini's Capsule format has `projectHash`, not a recoverable `cwd`; only an exact `sha256(TARGET_REPO)` match is provable. Exclude descendant Gemini launches.
+7. Discovery is read-only. State the selected count, nonzero aggregate skipped count, Capsule's `Select all` cleaning, raw-source preservation, and whether conversion copies are needed. Then ask exactly once: `Found N current-project sessions. Create cleaned upload copies?`
 
 ## Unsupported Formats
 
