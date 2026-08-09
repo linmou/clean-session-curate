@@ -1,4 +1,4 @@
-<!-- Intent: 说明安装、使用、隐私边界和验证方式。中文为默认版本；英文版见 README.en.md。Updated: 2026-08-09. Implementation commit: 7284ba2. -->
+<!-- Intent: 说明安装、使用、隐私边界和验证方式。中文为默认版本；英文版见 README.en.md。Updated: 2026-08-09. Implementation commit: 24866af. -->
 
 # Harness 会话脱敏与打包
 
@@ -13,7 +13,7 @@
 - 使用开源的 [Capsule](https://github.com/endorhq/capsule) `1.0.0` 命令行工具（Apache-2.0 许可证），对每个会话的副本进行匿名化。
 - Capsule 的 `Select all` 选项会替换文件路径和 Git 身份等信息。例如，`/Users/alice/project/src/app.ts` 会变成 `/project/src/file1.ts`，私有分支会变成 `branch-1`，仓库 URL 会变成 `https://github.com/user/repo-1.git`。
 - 同一选项还会移除工具输出、文件内容、思考块、系统消息和 token 使用量元数据。
-- Capsule 不保证识别直接写入普通对话文本的任意密钥或个人信息；因此本流程还会清除目标文件夹路径的不同写法，并在创建 ZIP 前验证清理后的导出内容。
+- Capsule 不保证识别直接写入普通对话文本的任意密钥或个人信息；因此本流程还会从解码后的 JSON/JSONL 值和对象键中清除词法及规范目标路径的不同写法（包括分隔符变体和 Windows 大小写变体），并在创建 ZIP 前验证清理后的导出内容。
 - OpenCode 等非原生格式按照文档中的 `Unsupported Formats` 转换流程处理：获得批准后，先用 `opencode export <sessionId>` 将 JSON 写入隔离临时目录，再转换为可供本技能处理的会话格式；原始数据库不会被改动或打包。
 - 最终生成清理后的 ZIP 归档。
 
@@ -44,6 +44,8 @@ node "<skill-dir>/scripts/find_repo_sessions.mjs" --target "/Users/alice/researc
 ```
 
 结果包含绝对路径 `target`、排序后的 `sessions` 和 `skipped`。Claude Code、Codex、Copilot 和 OpenCode 可匹配目标文件夹本身及其子目录；Gemini 只接受目标文件夹的精确哈希。
+
+符号链接语义是明确的：JSON 中的 `target` 保留用户选择的词法绝对路径；对于仍存在的记录目录，流程会解析其物理规范路径并进行分段安全的包含检查。已不存在的记录目录会同时针对所选别名和规范目标路径进行词法包含检查，因此不会放入逃逸目标的符号链接或仅有前缀关系的兄弟目录。Gemini 只接受所选别名或规范目标路径的精确 SHA-256 哈希，后代目录哈希仍会被排除。
 
 ## 环境要求
 

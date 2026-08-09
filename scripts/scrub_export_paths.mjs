@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Structurally remove the target repository path from completed Capsule exports.
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
 function optionValue(name) {
@@ -10,8 +10,8 @@ function optionValue(name) {
   return value;
 }
 
-function variants(root) {
-  return [...new Set([root, root.replaceAll("/", "\\"), root.replaceAll("\\", "/")])].sort((a, b) => b.length - a.length);
+function variants(roots) {
+  return [...new Set(roots.flatMap((root) => [root, root.replaceAll("/", "\\"), root.replaceAll("\\", "/")]))].sort((a, b) => b.length - a.length);
 }
 
 function replaceString(value, paths) {
@@ -66,7 +66,7 @@ function main() {
   const root = resolve(rootValue);
   const exportDir = resolve(exportValue);
   if (!statSync(exportDir).isDirectory()) throw new Error("Export directory must exist.");
-  const paths = variants(root);
+  const paths = variants([root, realpathSync.native(root)]);
   const staged = readdirSync(exportDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && /\.jsonl?$/i.test(entry.name))
     .sort((a, b) => a.name.localeCompare(b.name))

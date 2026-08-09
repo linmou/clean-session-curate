@@ -1,7 +1,7 @@
 // Tests scripts/scrub_export_paths.mjs removes repository paths only from exports.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,24 +18,30 @@ function stringsAndKeys(value) {
 
 test("scrubs repository paths from JSON and JSONL exports without touching raw input", () => {
   const workspace = mkdtempSync(join(tmpdir(), "session-scrub-"));
-  const repo = join(workspace, "repo");
+  const physicalRepo = join(workspace, "repo");
+  const repo = join(workspace, "repo-alias");
   const exportDir = join(workspace, "export");
   const raw = join(workspace, "raw-session.jsonl");
+  mkdirSync(physicalRepo);
+  symlinkSync(physicalRepo, repo, process.platform === "win32" ? "junction" : "dir");
   mkdirSync(exportDir, { recursive: true });
+  const canonicalRepo = realpathSync.native(physicalRepo);
   const jsonl = join(exportDir, "codex_001.jsonl");
   const json = join(exportDir, "gemini_001.json");
   const alternateRepo = repo.includes("\\") ? repo.replaceAll("\\", "/") : repo.replaceAll("/", "\\");
+  const alternateCanonical = canonicalRepo.includes("\\") ? canonicalRepo.replaceAll("\\", "/") : canonicalRepo.replaceAll("/", "\\");
   const caseVariant = process.platform === "win32" ? alternateRepo.toUpperCase() : alternateRepo;
+  const canonicalCaseVariant = process.platform === "win32" ? alternateCanonical.toUpperCase() : alternateCanonical;
   const rawContents = `${JSON.stringify({ cwd: repo })}\n`;
   writeFileSync(raw, rawContents);
-  writeFileSync(jsonl, `${JSON.stringify({ cwd: repo, text: `${alternateRepo}\\src\\main.js`, keep: "ordinary text" })}\n`);
-  writeFileSync(json, JSON.stringify({ workspace: caseVariant, nested: { [`${alternateRepo}\\private`]: `${alternateRepo}\\src\\main.js` } }));
+  writeFileSync(jsonl, `${JSON.stringify({ cwd: repo, canonical: canonicalRepo, text: `${alternateRepo}\\src\\main.js`, keep: "ordinary text" })}\n`);
+  writeFileSync(json, JSON.stringify({ workspace: caseVariant, canonical: canonicalCaseVariant, nested: { [`${alternateRepo}\\private`]: `${alternateCanonical}\\src\\main.js` } }));
 
   execFileSync("node", [script, "--root", repo, "--export-dir", exportDir]);
 
   const scrubbed = [JSON.parse(readFileSync(jsonl, "utf8").trim()), JSON.parse(readFileSync(json, "utf8"))];
   const values = scrubbed.flatMap(stringsAndKeys);
-  assert.equal(values.some((value) => value.toLowerCase().includes(repo.toLowerCase()) || value.toLowerCase().includes(alternateRepo.toLowerCase())), false);
+  assert.equal(values.some((value) => [repo, alternateRepo, canonicalRepo, alternateCanonical].some((path) => value.toLowerCase().includes(path.toLowerCase()))), false);
   assert.equal(values.filter((value) => value.includes("/project")).length >= 4, true);
   assert.match(readFileSync(jsonl, "utf8"), /ordinary text/);
   assert.equal(readFileSync(raw, "utf8"), rawContents);

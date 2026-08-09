@@ -1,4 +1,4 @@
-<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English. The Chinese default version is README.md. Updated: 2026-08-09. Implementation commit: 7284ba2. -->
+<!-- Intent: Explain installation, operation, privacy boundaries, and verification in English. The Chinese default version is README.md. Updated: 2026-08-09. Implementation commit: 24866af. -->
 
 # Clean Session Curate
 
@@ -13,7 +13,7 @@ Create a local, anonymized, upload-ready archive of coding-agent sessions that c
 - Uses the open-source [Capsule](https://github.com/endorhq/capsule) `1.0.0` CLI, licensed under Apache-2.0, to anonymize a copy of each session.
 - Capsule's `Select all` choice replaces file paths and Git identity. For example, `/Users/alice/project/src/app.ts` becomes `/project/src/file1.ts`, a private branch becomes `branch-1`, and a repository URL becomes `https://github.com/user/repo-1.git`.
 - The same choice removes tool outputs, file contents, thinking blocks, system messages, and token-usage metadata.
-- Capsule does not claim to detect arbitrary secrets or personal data written into ordinary conversation text. The workflow additionally scrubs target-folder path variants and validates cleaned exports before creating the ZIP.
+- Capsule does not claim to detect arbitrary secrets or personal data written into ordinary conversation text. The workflow additionally scrubs both lexical and canonical target-folder path variants from decoded JSON/JSONL values and object keys, including alternate separators and Windows case variants, then validates cleaned exports before creating the ZIP.
 - OpenCode and other non-native formats follow the documented `Unsupported Formats` conversion workflow: after approval, `opencode export <sessionId>` writes JSON into the isolated temporary directory, then that copy is converted into a format this skill can process. The raw database is never changed or packaged.
 - Produces the cleaned ZIP archive.
 
@@ -44,6 +44,8 @@ node "<skill-dir>/scripts/find_repo_sessions.mjs" --target "/Users/alice/researc
 ```
 
 The result contains absolute `target`, sorted `sessions`, and `skipped`. Claude Code, Codex, Copilot, and OpenCode sessions at or below the target are eligible; Gemini requires an exact target hash.
+
+Symlink semantics are deliberate: `target` preserves the selected lexical absolute path, while existing recorded directories are resolved to their canonical physical paths before segment-safe containment checks. Missing recorded directories use lexical containment against both the selected alias and its canonical target, so symlink escapes and prefix siblings stay excluded. Gemini accepts only the exact SHA-256 hash of the selected alias or canonical target; descendant hashes remain excluded.
 
 ## Requirements
 
