@@ -89,6 +89,27 @@ function selectCandidate(agent, path, repo) {
   return isInsideRepository(cwd, repo);
 }
 
+function openCodeSessions(repo) {
+  try {
+    const options = { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] };
+    const path = execFileSync("opencode", ["db", "path"], options).trim();
+    const rows = JSON.parse(execFileSync("opencode", ["db", "SELECT id, directory FROM session", "--format", "json"], options));
+    if (!path || !Array.isArray(rows)) return { sessions: [], skipped: 0 };
+    const sessions = [];
+    let skipped = 0;
+    for (const row of rows) {
+      if (typeof row?.id === "string" && row.id && isInsideRepository(row.directory, repo)) {
+        sessions.push({ agent: "opencode", path, sessionId: row.id });
+      } else {
+        skipped += 1;
+      }
+    }
+    return { sessions, skipped };
+  } catch {
+    return { sessions: [], skipped: 0 };
+  }
+}
+
 function main() {
   const repo = resolve(gitRoot());
   const home = resolve(optionValue("--home") ?? homedir());
@@ -104,7 +125,10 @@ function main() {
       }
     }
   }
-  sessions.sort((left, right) => left.agent.localeCompare(right.agent) || left.path.localeCompare(right.path));
+  const openCode = openCodeSessions(repo);
+  sessions.push(...openCode.sessions);
+  skipped += openCode.skipped;
+  sessions.sort((left, right) => left.agent.localeCompare(right.agent) || left.path.localeCompare(right.path) || (left.sessionId ?? "").localeCompare(right.sessionId ?? ""));
   process.stdout.write(`${JSON.stringify({ repo, sessions, skipped })}\n`);
 }
 

@@ -9,11 +9,12 @@ Create a local, anonymized, upload-ready archive of coding-agent sessions that c
 ## What It Does
 
 - Discovers sessions from Agent Harness systems. Native Capsule `1.0.0` formats include Claude Code, Codex, Copilot, and Gemini.
+- When OpenCode is installed, discovers current-repository sessions through its read-only database commands. Each result keeps the shared database path plus a distinct `sessionId`; the database and WAL files are not read directly, copied, or changed.
 - Uses the open-source [Capsule](https://github.com/endorhq/capsule) `1.0.0` CLI, licensed under Apache-2.0, to anonymize a copy of each session.
 - Capsule's `Select all` choice replaces file paths and Git identity. For example, `/Users/alice/project/src/app.ts` becomes `/project/src/file1.ts`, a private branch becomes `branch-1`, and a repository URL becomes `https://github.com/user/repo-1.git`.
 - The same choice removes tool outputs, file contents, thinking blocks, system messages, and token-usage metadata.
 - Capsule does not claim to detect arbitrary secrets or personal data written into ordinary conversation text. The workflow additionally scrubs repository-path variants and validates cleaned exports before creating the ZIP.
-- OpenCode and other non-native formats follow the documented `Unsupported Formats` conversion workflow: after approval, an isolated copy is converted into a session format this skill can process; the raw session is never changed.
+- OpenCode and other non-native formats follow the documented `Unsupported Formats` conversion workflow: after approval, `opencode export <sessionId>` writes JSON into the isolated temporary directory, then that copy is converted into a format this skill can process. The raw database is never changed or packaged.
 - Produces the cleaned ZIP archive.
 
 ## Install With an AI Agent
@@ -70,7 +71,7 @@ Capsule `1.0.0` has no supported interface-locale option. The skill therefore wr
 npm run build
 ```
 
-Here, “build” means prepare and verify; it does not create a binary or distributable. The test suite covers environment preparation, native session selection, JSON/JSONL path scrubbing, contiguous anonymous names, archive membership, and archive integrity. GitHub Actions runs this novice workflow from a fresh checkout on `ubuntu-latest`, `windows-latest`, and `macos-latest`. Final archive creation uses the same tested command on every platform:
+Here, “build” means prepare and verify; it does not create a binary or distributable. The test suite covers environment preparation, native and OpenCode session selection, OpenCode database failure isolation, JSON/JSONL path scrubbing, contiguous anonymous names, archive membership, and archive integrity. GitHub Actions runs this novice workflow from a fresh checkout on `ubuntu-latest`, `windows-latest`, and `macos-latest`. Final archive creation uses the same tested command on every platform:
 
 ```text
 node "<skill-dir>/scripts/package_export.mjs" --root "<repo>" --export-dir "<repo>/session-export" --output "<repo>/session-export.zip"
