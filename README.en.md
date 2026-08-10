@@ -31,21 +31,11 @@ Repository-local npm preparation is automatic. Installing or upgrading Node.js, 
 
 ## Use
 
-Name any existing directory when invoking the skill. That explicit folder is treated as confirmed. If no folder is named, the skill offers the current Git repository when one is available; otherwise it asks for a target folder. Selection and directory validation happen before environment preparation or discovery.
+You can specify any existing directory when invoking the skill. When Git is available and the current directory belongs to a repository, the skill asks whether to use that repository as the target folder.
 
 ```text
-Use $clean-session-curate to prepare /Users/alice/research-data's agent sessions for upload.
+Use $clean-session-curate to prepare coding-agent sessions in <target-folder> for upload.
 ```
-
-Discovery can run from any working directory:
-
-```text
-node "<skill-dir>/scripts/find_repo_sessions.mjs" --target "/Users/alice/research-data"
-```
-
-The result contains absolute `target`, sorted `sessions`, and `skipped`. Claude Code, Codex, Copilot, and OpenCode sessions at or below the target are eligible; Gemini requires an exact target hash.
-
-Symlink semantics are deliberate: `target` preserves the selected lexical absolute path, while existing recorded directories are resolved to their canonical physical paths before segment-safe containment checks. Missing recorded directories use lexical containment against both the selected alias and its canonical target, so symlink escapes and prefix siblings stay excluded. Gemini accepts only the exact SHA-256 hash of the selected alias or canonical target; descendant hashes remain excluded.
 
 ## Requirements
 

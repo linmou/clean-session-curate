@@ -31,21 +31,11 @@
 
 ## 使用
 
-调用技能时可直接指定任意现有目录；明确指定即视为已确认。如果没有指定文件夹，技能会在 Git 可用且当前目录属于仓库时询问是否使用该仓库；否则会要求提供目标文件夹。选择并验证目录发生在环境准备和会话发现之前。
+调用技能时可直接指定任意现有目录；技能会在 Git 可用且当前目录属于仓库时询问是否使用该仓库。
 
 ```text
-使用 $clean-session-curate 准备 /Users/alice/research-data 中的编程智能体会话，以便上传。
+使用 $clean-session-curate 准备 <目标目录> 中的编程智能体会话，以便上传。
 ```
-
-发现命令可从任意工作目录运行：
-
-```text
-node "<skill-dir>/scripts/find_repo_sessions.mjs" --target "/Users/alice/research-data"
-```
-
-结果包含绝对路径 `target`、排序后的 `sessions` 和 `skipped`。Claude Code、Codex、Copilot 和 OpenCode 可匹配目标文件夹本身及其子目录；Gemini 只接受目标文件夹的精确哈希。
-
-符号链接语义是明确的：JSON 中的 `target` 保留用户选择的词法绝对路径；对于仍存在的记录目录，流程会解析其物理规范路径并进行分段安全的包含检查。已不存在的记录目录会同时针对所选别名和规范目标路径进行词法包含检查，因此不会放入逃逸目标的符号链接或仅有前缀关系的兄弟目录。Gemini 只接受所选别名或规范目标路径的精确 SHA-256 哈希，后代目录哈希仍会被排除。
 
 ## 环境要求
 
