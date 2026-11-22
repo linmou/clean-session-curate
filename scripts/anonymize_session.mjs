@@ -60,9 +60,12 @@ function buildStage2Rules(profile) {
     [/(--(?:RecordId|ConfigId|CertId)\s+["']?)\d{6,}(["']?)/g, "$1000000$2"],
     [/\b(gh\s+run\s+(?:view|watch|rerun|cancel)\s+)\d{6,}/g, "$1000000"],
     [/(\s-R\s+)(?:\[REDACTED_ORG_IDENT\]|[A-Za-z0-9_.-]+)\/[A-Za-z0-9_.-]+/g, "$1user/repo-1"],
-    // 2d. Standalone 40-char full Git commit SHAs & contextual 7-12 char short commit SHAs
+    // 2d. Standalone 40-char full Git commit SHAs, provider user/thread IDs, & contextual 7-12 char short commit SHAs
+    [/\buser-[A-Za-z0-9]{16,}\b/g, "[REDACTED_USER_ID]"],
+    [/\bthread_[0-9a-f]{24,}\b/gi, "[REDACTED_THREAD_ID]"],
     [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{40}\b/g, "0000000000000000000000000000000000000000"],
-    [/\b((?:commit|gitlink|to|in|at|from|HEAD|sha|rev)\s+`?)(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}\b/gi, "$10000000"],
+    [/\b((?:commit|gitlink|to|in|at|from|HEAD|sha|rev):?\s+`?)(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}\b/gi, "$10000000"],
+    [/\b(Recent commits:\s*(?:\\n|\n)?)(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}\b/gi, "$10000000"],
     [/\((?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}\)/g, "(0000000)"],
     [/`(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}`/g, "`0000000`"],
     // 2e. GitHub/chat @handles (excluding scoped npm packages @scope/pkg and emails)
@@ -210,7 +213,7 @@ function anonymizeAndScrub(jsonlContent, profile, extraTerms = []) {
   };
 
   const PRESERVE_KEYS = new Set(["type", "role", "timestamp", "id", "call_id", "tool_use_id", "model", "is_error", "subtype", "sessionId", "originator"]);
-  const STRIP_SENSITIVE_KEYS = new Set(["accountUuid", "organizationUuid", "creator_user_id", "creator_account_id", "model_provider", "toolUseResult"]);
+  const STRIP_SENSITIVE_KEYS = new Set(["accountUuid", "organizationUuid", "creator_user_id", "creator_account_id", "model_provider", "toolUseResult", "sonic_user_id", "sonic_thread_id", "debug_sonic_thread_id"]);
 
   // Recursive AST walker (objects + arrays + JSON-encoded tool argument strings!)
   const deepMaskAndScrub = (val, applyPathMask, parentKey = "") => {

@@ -219,7 +219,7 @@ test("strips session-owner/UUIDs, redacts Holdout deterministic classes, and app
         cwd: "/Users/alice/SecretPaperRepo-worktree",
         message: {
           role: "user",
-          content: "Git user: Alice Lin\nSee https://github.com/myhandle/SecretPaperRepo and @teammate_dev (commit a1b2c3d) and https://outlook.office.com/mail/?ItemID=AAMkAGI2TG93AAA1234567890 and https://claude.ai/code/session_01AbCdEf. PI Dr. Jane Doe at Penn State University (HRP-591). 联系人张三，地址北京市海淀区中关村大街1号。",
+          content: "Git user: Alice Lin\nSee https://github.com/myhandle/SecretPaperRepo and @teammate_dev (commit a1b2c3d) Based on commit: 4213d8b Recent commits: 3d6d0a3 user-8qJIsSe6Ue4Ak5zQcoLXl2ni thread_6af427ffe7688329a58896482d245b04 and https://outlook.office.com/mail/?ItemID=AAMkAGI2TG93AAA1234567890 and https://claude.ai/code/session_01AbCdEf. PI Dr. Jane Doe at Penn State University (HRP-591). 联系人张三，地址北京市海淀区中关村大街1号。",
         },
       },
     ];
@@ -235,7 +235,8 @@ test("strips session-owner/UUIDs, redacts Holdout deterministic classes, and app
     for (const leaked of [
       "acc-1234", "org-5678", "uid-99", "custom-proxy",
       "Alice Lin", "myhandle", "SecretPaperRepo", "@teammate_dev",
-      "a1b2c3d", "AAMkAGI2TG93AAA1234567890", "session_01AbCdEf",
+      "a1b2c3d", "4213d8b", "3d6d0a3", "user-8qJIsSe6Ue4Ak5zQcoLXl2ni", "thread_6af427ffe7688329a58896482d245b04",
+      "AAMkAGI2TG93AAA1234567890", "session_01AbCdEf",
       "Jane", "Doe", "Penn State University", "HRP-591", "张三", "中关村大街",
     ]) {
       assert.equal(out.includes(leaked), false, `Expected ${leaked} to be redacted`);
