@@ -194,7 +194,10 @@ function anonymizeAndScrub(jsonlContent, profile, extraTerms = []) {
     .sort((a, b) => b.literal.length - a.literal.length);
   for (const t of sortedTerms) {
     const flags = t.caseSensitive ? "g" : "gi";
-    stage2Rules.push([new RegExp(escapeRe(t.literal), flags), t.replacement || "[REDACTED]"]);
+    const esc = escapeRe(t.literal);
+    const prefix = /^[A-Za-z0-9]/.test(t.literal) && !t.substring ? "(?<![A-Za-z0-9])" : "";
+    const suffix = /[A-Za-z0-9]$/.test(t.literal) && !t.substring ? "(?![A-Za-z0-9])" : "";
+    stage2Rules.push([new RegExp(`${prefix}${esc}${suffix}`, flags), t.replacement || "[REDACTED]"]);
   }
 
   const scrubStage2 = (str) => {
