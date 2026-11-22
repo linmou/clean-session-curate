@@ -92,14 +92,14 @@ function buildStage2Rules(profile) {
         const rootLabel = domain.split(".")[0];
         rules.push([new RegExp(`(?:[A-Za-z0-9\\-]+\\.)*${escapeRe(rootLabel)}\\.[a-z]{2,10}`, "gi"), "example.com"]);
         if (rootLabel.length >= 5 && !GENERIC_DENYLIST.has(rootLabel.toLowerCase())) {
-          // Do not clobber ALL_CAPS_ENV_VAR names before '='
+          // Only preserve ALL_CAPS_ENV_VAR= names; still redact lowercase org identifiers
           rules.push([new RegExp(`(?<!export\\s+)[A-Za-z0-9_-]*${escapeRe(rootLabel)}[A-Za-z0-9_-]*(?!\\s*=)`, "gi"), "[REDACTED_ORG_IDENT]"]);
         }
       }
     }
     if (profile.gitRemoteOrg && profile.gitRemoteOrg.length >= 4 && !GENERIC_DENYLIST.has(profile.gitRemoteOrg.toLowerCase())) {
       rules.push([new RegExp(`${escapeRe(profile.gitRemoteOrg)}/[A-Za-z0-9_.-]+`, "gi"), "user/repo-1"]);
-      rules.push([new RegExp(`(?<!export\\s+)[A-Za-z0-9_-]*${escapeRe(profile.gitRemoteOrg)}[A-Za-z0-9_-]*(?!\\s*=)`, "gi"), "[REDACTED_ORG_IDENT]"]);
+      rules.push([new RegExp(`[a-z0-9_-]*${escapeRe(profile.gitRemoteOrg.toLowerCase())}[a-z0-9_-]*`, "g"), "[REDACTED_ORG_IDENT]"]);
     }
     if (profile.user && profile.user.length >= 4 && !GENERIC_DENYLIST.has(profile.user.toLowerCase())) {
       rules.push([new RegExp(`(?<=\\/|\\\\|@)${escapeRe(profile.user)}(?=\\/|\\\\|\\b)`, "gi"), "user"]);
