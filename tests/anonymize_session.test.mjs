@@ -73,3 +73,51 @@ test("anonymizes array-nested paths, secrets, git-SSH, UNC, and preserves public
     rmSync(work, { recursive: true, force: true });
   }
 });
+
+test("redacts P1-2 blind-attacker classes: ICP, WeChat AppID, OAuth device-code/flow_id, cloud IDs, 40-char SHA, and CJK paths", () => {
+  const work = mkdtempSync(join(tmpdir(), "session-curate-p1-3-"));
+  try {
+    const input = join(work, "in.jsonl");
+    const output = join(work, "out.jsonl");
+    const lines = [
+      {
+        type: "assistant",
+        sessionId: "s2",
+        cwd: "/home/dev/proj",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "t1",
+              name: "bash",
+              input: {
+                cmd: 'aliyun --Description "闽ICP备19017454号-1" --ResourceGroupId rg-acfmzbpnzu54csi --RecordId 909285748641421312 && gh run view 41387939479 -R myorg/myrepo && lark-cli auth login --device-code "Ozw1nEAFlX8C3-hUTPLyIWjeqJObSaplGRO" && open "https://example.org/auth?flow_id=ONmNO_fXwriK0Vp&user_code=MF93-NV4H" && cat /home/dev/下载/private.wxa9665459b2a35cbb.key && echo fad664a0b63fc9630a18566acfac518769ab2811',
+              },
+            },
+          ],
+        },
+      },
+    ];
+    writeFileSync(input, `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
+    execFileSync(process.execPath, [script, "--input", input, "--output", output]);
+    const out = readFileSync(output, "utf8");
+    for (const secret of [
+      "19017454",
+      "rg-acfmzbpnzu54csi",
+      "909285748641421312",
+      "41387939479",
+      "myorg/myrepo",
+      "Ozw1nEAFlX8C3",
+      "ONmNO_fXwriK0Vp",
+      "MF93-NV4H",
+      "wxa9665459b2a35cbb",
+      "下载",
+      "fad664a0b63fc9630a18566acfac518769ab2811",
+    ]) {
+      assert.equal(out.includes(secret), false, `Expected ${secret} to be redacted`);
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});

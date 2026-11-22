@@ -43,6 +43,19 @@ function buildStage2Rules(profile) {
     [/xox[baprs]-[A-Za-z0-9\-]{10,}/g, "[REDACTED]"],
     [/Bearer\s+[A-Za-z0-9._\-]{12,}/g, "Bearer [REDACTED]"],
     [/\b([A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|PASSWD)\s*=\s*["']?)([^"'\s]{8,})(["']?)/g, "$1[REDACTED]$3"],
+    // 2b. CLI OAuth device-code / flow_id / user_code / message-ids & Chinese ICP / WeChat AppID
+    [/(--device-code\s+["']?)[A-Za-z0-9._\-]{16,}(["']?)/g, "$1[REDACTED_CODE]$2"],
+    [/([?&](?:flow_id|user_code)=)[^&\s"'<>)\]]+/gi, "$1[REDACTED]"],
+    [/(--message-ids\s+["']?)[A-Za-z0-9+/=,_ -]{20,}(["']?)/g, "$1[REDACTED_IDS]$2"],
+    [/[\u4e00-\u9fa5]ICP备\d{6,10}号(?:-\d+)?/g, "[REDACTED_ICP]"],
+    [/\bwx[0-9a-f]{16}\b/g, "[REDACTED_WX_APPID]"],
+    // 2c. Cloud infra IDs (Aliyun ResourceGroupId / RecordId / ConfigId / CertId) & GitHub Actions run IDs
+    [/\brg-[a-z0-9]{10,}\b/g, "[REDACTED_RG_ID]"],
+    [/(--(?:RecordId|ConfigId|CertId)\s+)\d{6,}/g, "$1000000"],
+    [/\b(gh\s+run\s+(?:view|watch|rerun|cancel)\s+)\d{6,}/g, "$1000000"],
+    [/(\s-R\s+)(?:\[REDACTED_ORG_IDENT\]|[A-Za-z0-9_.-]+)\/[A-Za-z0-9_.-]+/g, "$1user/repo-1"],
+    // 2d. Standalone 40-char full Git commit SHAs (hex with both letters and digits)
+    [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{40}\b/g, "0000000000000000000000000000000000000000"],
     // 3. URL-encoded emails & home paths
     [/[A-Za-z0-9._%+-]+%40[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gi, "[REDACTED_EMAIL]"],
     [/%2F(?:home|Users)%2F[A-Za-z0-9._-]+(?:%2F[^\s"'&<>)]*)?/gi, "%2Fhome%2Fuser"],
@@ -142,7 +155,8 @@ function anonymizeAndScrub(jsonlContent, profile) {
       guards.push(u);
       return key;
     });
-    const pathRegex = /(?:\/[\w.@-]+){2,}|~\/[\w.@/-]+|[A-Za-z]:\\[-\w.\\]+|\\\\[\w.-]+\\[\w.$-]+(?:\\[^\s"'<>)\]]*)?/g;
+    // Unicode-aware POSIX path segments (catches CJK dirs like /下载/private.key!)
+    const pathRegex = /(?:\/[\p{L}\p{N}._@-]+){2,}|~\/[\p{L}\p{N}._@/-]+|[A-Za-z]:\\[-\p{L}\p{N}_.\\]+|\\\\[\w.-]+\\[\w.$-]+(?:\\[^\s"'<>)\]]*)?/gu;
     for (const m of safe.matchAll(pathRegex)) maskPath(m[0]);
     for (const [orig, masked] of [...pathMap.entries()].sort((a, b) => b[0].length - a[0].length)) {
       safe = safe.replaceAll(orig, masked);
