@@ -185,3 +185,66 @@ test("preserves hyphenated English words (task-notification, risk-assessment) an
     rmSync(work, { recursive: true, force: true });
   }
 });
+
+test("strips session-owner/UUIDs, redacts Holdout deterministic classes, and applies --terms longest-first AST redaction", () => {
+  const work = mkdtempSync(join(tmpdir(), "session-curate-terms-"));
+  try {
+    const input = join(work, "in.jsonl");
+    const output = join(work, "out.jsonl");
+    const profile = join(work, "profile.json");
+    const terms = join(work, "terms.json");
+    writeFileSync(profile, JSON.stringify({
+      gitRemoteOrg: "myhandle",
+      gitRemoteRepo: "SecretPaperRepo",
+    }));
+    writeFileSync(terms, JSON.stringify({
+      terms: [
+        { literal: "Dr. Jane Doe", replacement: "[REDACTED_PERSON]" },
+        { literal: "Jane", replacement: "[REDACTED_PERSON]" },
+        { literal: "Penn State University", replacement: "[REDACTED_INSTITUTION]" },
+        { literal: "HRP-591", replacement: "[REDACTED_IRB]" },
+        { literal: "张三", replacement: "[REDACTED_PERSON]" },
+        { literal: "北京市海淀区中关村大街1号", replacement: "[REDACTED_ADDRESS]" },
+      ],
+    }));
+    const lines = [
+      { type: "session-owner", accountUuid: "acc-1234", organizationUuid: "org-5678" },
+      {
+        type: "user",
+        sessionId: "h1",
+        accountUuid: "acc-1234",
+        organizationUuid: "org-5678",
+        creator_user_id: "uid-99",
+        model_provider: "custom-proxy",
+        cwd: "/Users/alice/SecretPaperRepo-worktree",
+        message: {
+          role: "user",
+          content: "Git user: Alice Lin\nSee https://github.com/myhandle/SecretPaperRepo and @teammate_dev (commit a1b2c3d) and https://outlook.office.com/mail/?ItemID=AAMkAGI2TG93AAA1234567890 and https://claude.ai/code/session_01AbCdEf. PI Dr. Jane Doe at Penn State University (HRP-591). 联系人张三，地址北京市海淀区中关村大街1号。",
+        },
+      },
+    ];
+    writeFileSync(input, `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
+    execFileSync(process.execPath, [script, "--input", input, "--output", output, "--profile", profile, "--terms", terms]);
+    const out = readFileSync(output, "utf8");
+    const parsed = out.trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(parsed.length, 1, "session-owner record should be stripped");
+    assert.equal(parsed[0].accountUuid, undefined);
+    assert.equal(parsed[0].organizationUuid, undefined);
+    assert.equal(parsed[0].creator_user_id, undefined);
+    assert.equal(parsed[0].model_provider, undefined);
+    for (const leaked of [
+      "acc-1234", "org-5678", "uid-99", "custom-proxy",
+      "Alice Lin", "myhandle", "SecretPaperRepo", "@teammate_dev",
+      "a1b2c3d", "AAMkAGI2TG93AAA1234567890", "session_01AbCdEf",
+      "Jane", "Doe", "Penn State University", "HRP-591", "张三", "中关村大街",
+    ]) {
+      assert.equal(out.includes(leaked), false, `Expected ${leaked} to be redacted`);
+    }
+    assert.match(out, /\[REDACTED_PERSON\]/);
+    assert.match(out, /\[REDACTED_INSTITUTION\]/);
+    assert.match(out, /\[REDACTED_IRB\]/);
+    assert.match(out, /\[REDACTED_ADDRESS\]/);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});

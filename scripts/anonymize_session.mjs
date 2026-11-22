@@ -43,22 +43,30 @@ function buildStage2Rules(profile) {
     [/\bxox[baprs]-[A-Za-z0-9\-]{10,}/g, "[REDACTED]"],
     [/\bBearer\s+[A-Za-z0-9._\-]{12,}/g, "Bearer [REDACTED]"],
     [/\b([A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|PASSWD)\s*=\s*["']?)([^"'\s]{8,})(["']?)/g, "$1[REDACTED]$3"],
-    // 2b. CLI OAuth device-code / flow_id / user_code / message-ids, Chinese ICP, WeChat AppID, Supabase/DDNS/CF-Ray
+    // 2b. CLI OAuth device-code / flow_id / user_code / message-ids, Chinese ICP, WeChat AppID, Supabase/DDNS/CF-Ray, OWA/Claude session URLs
     [/(--device-code\s+["']?)[A-Za-z0-9._\-]{16,}(["']?)/g, "$1[REDACTED_CODE]$2"],
-    [/([?&](?:flow_id|user_code|project_ref)=)[^&\s"'<>)\]]+/gi, "$1[REDACTED]"],
+    [/([?&](?:flow_id|user_code|project_ref|ItemID)=)[^&\s"'<>)\]]+/gi, "$1[REDACTED]"],
     [/(--message-ids\s+["']?)[A-Za-z0-9+/=,_ -]{20,}(["']?)/g, "$1[REDACTED_IDS]$2"],
+    [/\bAAMk[A-Za-z0-9+/=%_-]{20,}/g, "[REDACTED_MSG_ID]"],
+    [/https?:\/\/claude\.ai\/code\/session_[A-Za-z0-9_-]+/gi, "https://claude.ai/code/session_redacted"],
     [/[\u4e00-\u9fa5]ICP备\d{6,10}号(?:-\d+)?/g, "[REDACTED_ICP]"],
     [/\bwx[0-9a-f]{16}\b/g, "[REDACTED_WX_APPID]"],
     [/https?:\/\/[a-z0-9]{12,}\.supabase\.co\b/gi, "https://project-ref.supabase.co"],
     [/\b[a-z0-9-]+\.(?:ipyingshe\.net|ngrok\.io|ngrok-free\.app|trycloudflare\.com)\b/gi, "tunnel.example.com"],
     [/\b(cf-ray:\s*)[0-9a-f]{12,}-[A-Z]{3}\b/gi, "$10000000000000000-XXX"],
+    [/\b(Git user:\s*)[^\r\n,;|]+/gi, "$1[REDACTED_USER]"],
     // 2c. Cloud infra IDs (Aliyun ResourceGroupId / RecordId / ConfigId / CertId) & GitHub Actions run IDs
     [/\brg-[a-z0-9]{10,}\b/g, "[REDACTED_RG_ID]"],
     [/(--(?:RecordId|ConfigId|CertId)\s+["']?)\d{6,}(["']?)/g, "$1000000$2"],
     [/\b(gh\s+run\s+(?:view|watch|rerun|cancel)\s+)\d{6,}/g, "$1000000"],
     [/(\s-R\s+)(?:\[REDACTED_ORG_IDENT\]|[A-Za-z0-9_.-]+)\/[A-Za-z0-9_.-]+/g, "$1user/repo-1"],
-    // 2d. Standalone 40-char full Git commit SHAs (hex with both letters and digits)
+    // 2d. Standalone 40-char full Git commit SHAs & contextual 7-12 char short commit SHAs
     [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{40}\b/g, "0000000000000000000000000000000000000000"],
+    [/\b((?:commit|gitlink|to|in|at|from|HEAD|sha|rev)\s+`?)(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}\b/gi, "$10000000"],
+    [/\((?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}\)/g, "(0000000)"],
+    [/`(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}`/g, "`0000000`"],
+    // 2e. GitHub/chat @handles (excluding scoped npm packages @scope/pkg and emails)
+    [/(?<![A-Za-z0-9._%+-])@[A-Za-z0-9][A-Za-z0-9_-]{2,38}(?![A-Za-z0-9._\/-])/g, "@[REDACTED_HANDLE]"],
     // 3. URL-encoded emails & home paths
     [/[A-Za-z0-9._%+-]+%40[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gi, "[REDACTED_EMAIL]"],
     [/%2F(?:home|Users)%2F[A-Za-z0-9._-]+(?:%2F[^\s"'&<>)]*)?/gi, "%2Fhome%2Fuser"],
@@ -119,8 +127,12 @@ function buildStage2Rules(profile) {
       }
     }
     if (profile.gitRemoteOrg && profile.gitRemoteOrg.length >= 4 && !GENERIC_DENYLIST.has(profile.gitRemoteOrg.toLowerCase())) {
+      rules.push([new RegExp(`https?://github\\.com/${escapeRe(profile.gitRemoteOrg)}/[^\\s"'<>\\)\\]]+`, "gi"), "https://github.com/user/repo-1"]);
       rules.push([new RegExp(`${escapeRe(profile.gitRemoteOrg)}/[A-Za-z0-9_.-]+`, "gi"), "user/repo-1"]);
       rules.push([new RegExp(`[a-z0-9_-]*${escapeRe(profile.gitRemoteOrg.toLowerCase())}[a-z0-9_-]*`, "g"), "[REDACTED_ORG_IDENT]"]);
+    }
+    if (profile.gitRemoteRepo && profile.gitRemoteRepo.length >= 5 && !GENERIC_DENYLIST.has(profile.gitRemoteRepo.toLowerCase())) {
+      rules.push([new RegExp(`\\b${escapeRe(profile.gitRemoteRepo)}(?:-[a-z0-9_-]+)?\\b`, "gi"), "project-repo"]);
     }
     if (profile.user && profile.user.length >= 4 && !GENERIC_DENYLIST.has(profile.user.toLowerCase())) {
       rules.push([new RegExp(`(?<=\\/|\\\\|@)${escapeRe(profile.user)}(?=\\/|\\\\|\\b)`, "gi"), "user"]);
@@ -144,7 +156,7 @@ function redactBase64Secrets(text) {
   });
 }
 
-function anonymizeAndScrub(jsonlContent, profile) {
+function anonymizeAndScrub(jsonlContent, profile, extraTerms = []) {
   const pathMap = new Map();
   let counter = 1;
   const maskPath = (p) => {
@@ -176,6 +188,15 @@ function anonymizeAndScrub(jsonlContent, profile) {
   };
 
   const stage2Rules = buildStage2Rules(profile);
+  // Append Agent Privacy Hunter literal terms (longest-first to avoid partial replacement collisions)
+  const sortedTerms = [...(extraTerms ?? [])]
+    .filter((t) => t && typeof t.literal === "string" && t.literal.length >= 2)
+    .sort((a, b) => b.literal.length - a.literal.length);
+  for (const t of sortedTerms) {
+    const flags = t.caseSensitive ? "g" : "gi";
+    stage2Rules.push([new RegExp(escapeRe(t.literal), flags), t.replacement || "[REDACTED]"]);
+  }
+
   const scrubStage2 = (str) => {
     let out = str;
     for (const [re, rep] of stage2Rules) {
@@ -186,6 +207,7 @@ function anonymizeAndScrub(jsonlContent, profile) {
   };
 
   const PRESERVE_KEYS = new Set(["type", "role", "timestamp", "id", "call_id", "tool_use_id", "model", "is_error", "subtype", "sessionId", "originator"]);
+  const STRIP_SENSITIVE_KEYS = new Set(["accountUuid", "organizationUuid", "creator_user_id", "creator_account_id", "model_provider", "toolUseResult"]);
 
   // Recursive AST walker (objects + arrays + JSON-encoded tool argument strings!)
   const deepMaskAndScrub = (val, applyPathMask, parentKey = "") => {
@@ -207,9 +229,12 @@ function anonymizeAndScrub(jsonlContent, profile) {
     }
     if (Array.isArray(val)) return val.map((item) => deepMaskAndScrub(item, applyPathMask));
     if (val && typeof val === "object") {
-      return Object.fromEntries(
-        Object.entries(val).map(([k, v]) => [scrubStage2(k), deepMaskAndScrub(v, applyPathMask, k)])
-      );
+      const out = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (STRIP_SENSITIVE_KEYS.has(k)) continue;
+        out[scrubStage2(k)] = deepMaskAndScrub(v, applyPathMask, k);
+      }
+      return out;
     }
     return val;
   };
@@ -220,7 +245,7 @@ function anonymizeAndScrub(jsonlContent, profile) {
     const entry = JSON.parse(line);
 
     // 1. Format-specific structural stripping (Claude Code + Codex)
-    if (entry.type === "system" || entry.type === "file-history-snapshot" || entry.type === "progress") continue;
+    if (entry.type === "system" || entry.type === "file-history-snapshot" || entry.type === "progress" || entry.type === "session-owner") continue;
     if (entry.type === "event_msg" && entry.payload?.type === "token_count") continue;
     if (entry.type === "response_item") {
       const pt = entry.payload?.type;
@@ -257,9 +282,12 @@ function main() {
   const input = optionValue("--input");
   const output = optionValue("--output");
   const profilePath = optionValue("--profile");
-  if (!input || !output) throw new Error("Usage: anonymize_session.mjs --input <in.jsonl> --output <out.jsonl> [--profile <profile.json>]");
+  const termsPath = optionValue("--terms");
+  if (!input || !output) throw new Error("Usage: anonymize_session.mjs --input <in.jsonl> --output <out.jsonl> [--profile <profile.json>] [--terms <terms.json>]");
   const profile = profilePath ? JSON.parse(readFileSync(profilePath, "utf8")) : null;
-  const cleaned = anonymizeAndScrub(readFileSync(input, "utf8"), profile);
+  const termsDoc = termsPath ? JSON.parse(readFileSync(termsPath, "utf8")) : null;
+  const extraTerms = Array.isArray(termsDoc) ? termsDoc : termsDoc?.terms ?? [];
+  const cleaned = anonymizeAndScrub(readFileSync(input, "utf8"), profile, extraTerms);
   writeFileSync(output, cleaned);
 }
 
