@@ -11,6 +11,7 @@ const SESSION_ROOTS = [
   ["codex", ".codex/sessions"],
   ["copilot", ".copilot/session-state"],
   ["gemini", ".gemini/tmp"],
+  ["pi", ".pi/agent/sessions"],
 ];
 
 function optionValue(name) {
@@ -104,34 +105,77 @@ function geminiMatches(path, targets) {
   return hashes.includes(root.projectHash);
 }
 
+function piCwd(path) {
+  const firstLine = readFileSync(path, "utf8").split(/\r?\n/, 1)[0];
+  if (!firstLine || !firstLine.trim()) return undefined;
+  const header = JSON.parse(firstLine);
+  return header?.type === "session" && typeof header.cwd === "string" ? header.cwd : undefined;
+}
+
 function selectCandidate(agent, path, targets) {
   if (agent === "gemini") return geminiMatches(path, targets);
+  if (agent === "pi") return isInsideTarget(piCwd(path), targets);
   const records = jsonLines(path);
   const cwd = agent === "claude" ? claudeCwd(records) : agent === "codex" ? codexCwd(records) : copilotCwd(records);
   return isInsideTarget(cwd, targets);
 }
 
-function openCodeSessions(targets) {
+function queryOpenCodeSqliteReadOnly(dbPath) {
+  try {
+    const raw = execFileSync(
+      "sqlite3",
+      ["-readonly", "-json", `file:${dbPath}?mode=ro&immutable=1`, "SELECT id, directory FROM session"],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }
+    );
+    return raw.trim() ? JSON.parse(raw) : [];
+  } catch {
+    const py = "import json,sqlite3,sys; c=sqlite3.connect(f'file:{sys.argv[1]}?mode=ro&immutable=1',uri=True); print(json.dumps([{'id':r[0],'directory':r[1]} for r in c.execute('SELECT id, directory FROM session').fetchall()]))";
+    const raw = execFileSync("python3", ["-c", py, dbPath], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return raw.trim() ? JSON.parse(raw) : [];
+  }
+}
+
+function openCodeSessions(targets, home) {
+  let path = "";
+  let rows = null;
   try {
     const options = { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] };
     const queryOptions = { ...options, maxBuffer: 64 * 1024 * 1024 };
-    const path = execCommand("opencode", ["db", "path"], options).trim();
-    const rows = JSON.parse(execCommand("opencode", ["db", "SELECT id, directory FROM session", "--format", "json"], queryOptions));
-    if (!path || !Array.isArray(rows)) return { sessions: [], skipped: 0 };
-    const sessions = [];
-    let skipped = 0;
-    for (const row of rows) {
-      if (typeof row?.id === "string" && row.id && isInsideTarget(row.directory, targets)) {
-        sessions.push({ agent: "opencode", path, sessionId: row.id });
-      } else {
-        skipped += 1;
-      }
-    }
-    return { sessions, skipped };
+    path = execCommand("opencode", ["db", "path"], options).trim();
+    rows = JSON.parse(execCommand("opencode", ["db", "SELECT id, directory FROM session", "--format", "json"], queryOptions));
   } catch (error) {
-    if (error?.code === "ENOBUFS") process.stderr.write("OpenCode session query exceeded the 64 MiB maxBuffer (ENOBUFS); skipping OpenCode sessions.\n");
-    return { sessions: [], skipped: 0 };
+    if (error?.code === "ENOBUFS") {
+      process.stderr.write("OpenCode session query exceeded the 64 MiB maxBuffer (ENOBUFS); skipping OpenCode sessions.\n");
+      return { sessions: [], skipped: 0 };
+    }
+    const defaultDb = join(home, ".local", "share", "opencode", "opencode.db");
+    if (existsSync(defaultDb)) {
+      try {
+        path = defaultDb;
+        rows = queryOpenCodeSqliteReadOnly(defaultDb);
+      } catch (sqliteError) {
+        process.stderr.write(`OpenCode database found at ${defaultDb} but read-only query failed: ${sqliteError.message}\n`);
+        return { sessions: [], skipped: 0 };
+      }
+    } else {
+      return { sessions: [], skipped: 0 };
+    }
   }
+  if (!path || !Array.isArray(rows)) return { sessions: [], skipped: 0 };
+  const sessions = [];
+  let skipped = 0;
+  for (const row of rows) {
+    if (typeof row?.id === "string" && row.id && isInsideTarget(row.directory, targets)) {
+      sessions.push({ agent: "opencode", path, sessionId: row.id });
+    } else {
+      skipped += 1;
+    }
+  }
+  return { sessions, skipped };
 }
 
 function main() {
@@ -149,7 +193,7 @@ function main() {
       }
     }
   }
-  const openCode = openCodeSessions(targets);
+  const openCode = openCodeSessions(targets, home);
   sessions.push(...openCode.sessions);
   skipped += openCode.skipped;
   sessions.sort((left, right) => left.agent.localeCompare(right.agent) || left.path.localeCompare(right.path) || (left.sessionId ?? "").localeCompare(right.sessionId ?? ""));
