@@ -149,3 +149,39 @@ test("anonymizes Codex JSONL (session_meta, response_item, JSON arguments) and s
     rmSync(work, { recursive: true, force: true });
   }
 });
+
+test("preserves hyphenated English words (task-notification, risk-assessment) and #!/usr/bin/env while redacting Supabase, public IPs, DDNS, and repo basename", () => {
+  const work = mkdtempSync(join(tmpdir(), "session-curate-p2-2-"));
+  try {
+    const input = join(work, "in.jsonl");
+    const output = join(work, "out.jsonl");
+    const profile = join(work, "profile.json");
+    writeFileSync(profile, JSON.stringify({ targetRoot: "/Users/admin/Documents/PhishingTrainingProgram" }));
+    const lines = [
+      {
+        type: "user",
+        sessionId: "p2",
+        cwd: "/Users/admin/Documents/PhishingTrainingProgram",
+        message: {
+          role: "user",
+          content: "Check </task-notification> and risk-assessment in PhishingTrainingProgram; #!/usr/bin/env node; https://zgbufaxooqxeabewktzd.supabase.co; ssh -o BatchMode=yes admin@47.88.13.118; qnfemkob.ipyingshe.net; cf-ray: a55fe6f35e23dfc2-IAD; keep 127.0.0.1",
+        },
+      },
+    ];
+    writeFileSync(input, `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
+    execFileSync(process.execPath, [script, "--input", input, "--output", output, "--profile", profile]);
+    const parsed = JSON.parse(readFileSync(output, "utf8").trim());
+    const text = parsed.message.content;
+    assert.match(text, /<\/task-notification>/);
+    assert.match(text, /risk-assessment/);
+    assert.match(text, /#!\/usr\/bin\/env node/);
+    assert.match(text, /127\.0\.0\.1/);
+    assert.equal(text.includes("PhishingTrainingProgram"), false);
+    assert.equal(text.includes("zgbufaxooqxeabewktzd"), false);
+    assert.equal(text.includes("47.88.13.118"), false);
+    assert.equal(text.includes("qnfemkob.ipyingshe.net"), false);
+    assert.equal(text.includes("a55fe6f35e23dfc2-IAD"), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});

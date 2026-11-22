@@ -31,27 +31,30 @@ function buildStage2Rules(profile) {
     [/(https?:\/\/)[^\/\s:@]+:[^\/\s@]+@[^\s"'<>)\]]+/gi, "$1[REDACTED]@example.com/repo.git"],
     [/git@[A-Za-z0-9.-]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?/g, "ssh://git.example/user/repo-1.git"],
     [/open\.feishu\.cn\/open-apis\/bot\/v2\/hook\/[A-Za-z0-9\-]+/g, "[REDACTED_WEBHOOK]"],
-    // 2. Secrets, tokens, JWTs, PEM keys, env assignments
+    // 2. Secrets, tokens, JWTs, PEM keys, env assignments (word-boundary anchored!)
     [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED_KEY]"],
     [/\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_JWT]"],
-    [/sk-(?:proj-|live-|pi-)?[A-Za-z0-9_\-]{8,}/g, "[REDACTED]"],
-    [/ghp_[A-Za-z0-9]{16,}/g, "[REDACTED]"],
-    [/github_pat_[A-Za-z0-9_]{20,}/g, "[REDACTED]"],
-    [/AKIA[0-9A-Z]{12,}/g, "[REDACTED]"],
-    [/LTAI[A-Za-z0-9]{12,}/g, "[REDACTED]"],
-    [/AKID[A-Za-z0-9]{12,}/g, "[REDACTED]"],
-    [/xox[baprs]-[A-Za-z0-9\-]{10,}/g, "[REDACTED]"],
-    [/Bearer\s+[A-Za-z0-9._\-]{12,}/g, "Bearer [REDACTED]"],
+    [/\bsk-(?:proj-|live-|pi-|ant-)?[A-Za-z0-9_\-]{12,}/g, "[REDACTED]"],
+    [/\bghp_[A-Za-z0-9]{16,}/g, "[REDACTED]"],
+    [/\bgithub_pat_[A-Za-z0-9_]{20,}/g, "[REDACTED]"],
+    [/\bAKIA[0-9A-Z]{12,}/g, "[REDACTED]"],
+    [/\bLTAI[A-Za-z0-9]{12,}/g, "[REDACTED]"],
+    [/\bAKID[A-Za-z0-9]{12,}/g, "[REDACTED]"],
+    [/\bxox[baprs]-[A-Za-z0-9\-]{10,}/g, "[REDACTED]"],
+    [/\bBearer\s+[A-Za-z0-9._\-]{12,}/g, "Bearer [REDACTED]"],
     [/\b([A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|PASSWD)\s*=\s*["']?)([^"'\s]{8,})(["']?)/g, "$1[REDACTED]$3"],
-    // 2b. CLI OAuth device-code / flow_id / user_code / message-ids & Chinese ICP / WeChat AppID
+    // 2b. CLI OAuth device-code / flow_id / user_code / message-ids, Chinese ICP, WeChat AppID, Supabase/DDNS/CF-Ray
     [/(--device-code\s+["']?)[A-Za-z0-9._\-]{16,}(["']?)/g, "$1[REDACTED_CODE]$2"],
-    [/([?&](?:flow_id|user_code)=)[^&\s"'<>)\]]+/gi, "$1[REDACTED]"],
+    [/([?&](?:flow_id|user_code|project_ref)=)[^&\s"'<>)\]]+/gi, "$1[REDACTED]"],
     [/(--message-ids\s+["']?)[A-Za-z0-9+/=,_ -]{20,}(["']?)/g, "$1[REDACTED_IDS]$2"],
     [/[\u4e00-\u9fa5]ICP备\d{6,10}号(?:-\d+)?/g, "[REDACTED_ICP]"],
     [/\bwx[0-9a-f]{16}\b/g, "[REDACTED_WX_APPID]"],
+    [/https?:\/\/[a-z0-9]{12,}\.supabase\.co\b/gi, "https://project-ref.supabase.co"],
+    [/\b[a-z0-9-]+\.(?:ipyingshe\.net|ngrok\.io|ngrok-free\.app|trycloudflare\.com)\b/gi, "tunnel.example.com"],
+    [/\b(cf-ray:\s*)[0-9a-f]{12,}-[A-Z]{3}\b/gi, "$10000000000000000-XXX"],
     // 2c. Cloud infra IDs (Aliyun ResourceGroupId / RecordId / ConfigId / CertId) & GitHub Actions run IDs
     [/\brg-[a-z0-9]{10,}\b/g, "[REDACTED_RG_ID]"],
-    [/(--(?:RecordId|ConfigId|CertId)\s+)\d{6,}/g, "$1000000"],
+    [/(--(?:RecordId|ConfigId|CertId)\s+["']?)\d{6,}(["']?)/g, "$1000000$2"],
     [/\b(gh\s+run\s+(?:view|watch|rerun|cancel)\s+)\d{6,}/g, "$1000000"],
     [/(\s-R\s+)(?:\[REDACTED_ORG_IDENT\]|[A-Za-z0-9_.-]+)\/[A-Za-z0-9_.-]+/g, "$1user/repo-1"],
     // 2d. Standalone 40-char full Git commit SHAs (hex with both letters and digits)
@@ -66,13 +69,13 @@ function buildStage2Rules(profile) {
     [/(?:[A-Za-z0-9\-]+\.)*[a-z0-9\-]+\.amazonaws\.com/g, "cloud.example.com"],
     [/oss:\/\/(?!bucket\b)[a-z0-9][a-z0-9.\-]*/gi, "oss://bucket"],
     [/s3:\/\/(?!bucket\b)[a-z0-9][a-z0-9.\-]*/gi, "s3://bucket"],
-    // 6. GitHub CLI org/repo args, SSH login usernames & git commit SHAs
+    // 6. GitHub CLI org/repo args, SSH login usernames (including -o Key=Val flags) & git commit SHAs
     [/\b(gh\s+repo\s+(?:view|create|clone|delete|edit)\s+)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/g, "$1user/repo-1"],
     [/\b(gh\s+repo\s+list\s+)[A-Za-z0-9_.-]+/g, "$1user"],
-    [/\b(ssh\s+(?:-[A-Za-z0-9]+\s+)*)[A-Za-z0-9._-]+@([A-Za-z0-9._-]+)/g, "$1user@$2"],
+    [/\b(ssh\s+(?:-[A-Za-z0-9]+(?:\s+\S+)?\s+)*)[A-Za-z0-9._-]+@([A-Za-z0-9._-]+)/g, "$1user@$2"],
     [/\b(git\s+(?:show|checkout|cherry-pick|revert|reset\s+--hard)\s+)[0-9a-f]{7,40}\b/gi, "$10000000"],
-    // 7. Private RFC-1918 IPv4 addresses (preserving 127.0.0.1)
-    [/\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b/g, "10.0.0.1"],
+    // 7. Non-loopback IPv4 addresses (private RFC-1918 + public IPs, preserving 127.0.0.1 and 0.0.0.0)
+    [/\b(?!(?:127\.0\.0\.1|0\.0\.0\.0)\b)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g, "10.0.0.1"],
     // 8. Generic OS home / WSL / UNC paths (case-insensitive for Windows)
     [/\/mnt\/[a-z]\/Users\/[A-Za-z0-9._-]+/gi, "/mnt/c/Users/user"],
     [/\/(?:home|Users)\/[A-Za-z0-9._-]+/g, "/home/user"],
@@ -85,6 +88,11 @@ function buildStage2Rules(profile) {
     if (profile.targetRoot) {
       const variants = [...new Set([profile.targetRoot, profile.targetRoot.replaceAll("/", "\\"), profile.targetRoot.replaceAll("\\", "/")])].sort((a, b) => b.length - a.length);
       for (const v of variants) rules.push([new RegExp(escapeRe(v), "gi"), "/project"]);
+      // Also redact distinctive target repo basename (e.g. PhishingTrainingProgram) when >= 6 chars & non-generic
+      const repoBase = profile.targetRoot.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+      if (repoBase.length >= 6 && !GENERIC_DENYLIST.has(repoBase.toLowerCase())) {
+        rules.push([new RegExp(`\\b${escapeRe(repoBase)}(?:-[a-z0-9_-]+)?\\b`, "gi"), "project-repo"]);
+      }
     }
     if (profile.home) {
       const variants = [...new Set([profile.home, profile.home.replaceAll("/", "\\"), profile.home.replaceAll("\\", "/")])].sort((a, b) => b.length - a.length);
@@ -146,11 +154,11 @@ function anonymizeAndScrub(jsonlContent, profile) {
     return masked;
   };
 
-  // URL-guarded path masking (preserves https?://, ssh://, @scope/pkg, and /dev/null!)
+  // URL-guarded path masking (preserves https?://, ssh://, @scope/pkg, /dev/null, and standard POSIX system binaries!)
   const maskInString = (text) => {
     if (!text) return text;
     const guards = [];
-    let safe = text.replace(/(?:https?|ssh):\/\/[^\s"'<>)\]]+|@[a-z0-9-]+\/[a-z0-9-]+|\/dev\/null\b/gi, (u) => {
+    let safe = text.replace(/(?:https?|ssh):\/\/[^\s"'<>)\]]+|@[a-z0-9-]+\/[a-z0-9-]+|\/(?:dev\/null|usr\/bin\/env|bin\/(?:sh|bash|zsh))\b/gi, (u) => {
       const key = `__GUARD_${guards.length}__`;
       guards.push(u);
       return key;
