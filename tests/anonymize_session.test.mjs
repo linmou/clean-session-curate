@@ -121,3 +121,31 @@ test("redacts P1-2 blind-attacker classes: ICP, WeChat AppID, OAuth device-code/
     rmSync(work, { recursive: true, force: true });
   }
 });
+
+test("anonymizes Codex JSONL (session_meta, response_item, JSON arguments) and strips Claude progress/toolUseResult", () => {
+  const work = mkdtempSync(join(tmpdir(), "session-curate-codex-"));
+  try {
+    const input = join(work, "codex.jsonl");
+    const output = join(work, "codex_out.jsonl");
+    const lines = [
+      { type: "session_meta", payload: { id: "c1", originator: "codex_cli", cwd: "/Users/admin/Documents/proj", git: { branch: "feat/secret", repository_url: "https://github.com/org/private.git" } } },
+      { type: "response_item", payload: { type: "reasoning", text: "hidden thought" } },
+      { type: "response_item", payload: { type: "function_call", name: "shell", arguments: JSON.stringify({ cmd: "cat /Users/admin/.env && echo sk-proj-codex1234567890abcdef" }) } },
+      { type: "response_item", payload: { type: "function_call_output", output: "raw secret output" } },
+      { type: "progress", data: { path: "/Users/admin/Documents/proj/leak.txt" } },
+      { type: "event_msg", payload: { type: "token_count", total: 999 } },
+    ];
+    writeFileSync(input, `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
+    execFileSync(process.execPath, [script, "--input", input, "--output", output]);
+    const out = readFileSync(output, "utf8");
+    assert.equal(out.includes("/Users/admin"), false);
+    assert.equal(out.includes("codex1234567890abcdef"), false);
+    assert.equal(out.includes("raw secret output"), false);
+    assert.equal(out.includes("hidden thought"), false);
+    assert.equal(out.includes("feat/secret"), false);
+    assert.equal(out.includes("leak.txt"), false);
+    assert.match(out, /\[removed\]/);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});

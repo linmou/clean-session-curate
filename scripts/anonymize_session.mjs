@@ -177,10 +177,20 @@ function anonymizeAndScrub(jsonlContent, profile) {
     return redactBase64Secrets(out);
   };
 
-  // Recursive AST walker (objects + arrays!)
-  const deepMaskAndScrub = (val, applyPathMask) => {
+  const PRESERVE_KEYS = new Set(["type", "role", "timestamp", "id", "call_id", "tool_use_id", "model", "is_error", "subtype", "sessionId", "originator"]);
+
+  // Recursive AST walker (objects + arrays + JSON-encoded tool argument strings!)
+  const deepMaskAndScrub = (val, applyPathMask, parentKey = "") => {
     if (typeof val === "string") {
-      // Run Stage-2 structured URI/secret rules BEFORE path masking so URLs/secrets are cleanly caught
+      if (PRESERVE_KEYS.has(parentKey)) return val;
+      // If a Codex function_call.arguments field is a JSON string, parse -> scrub -> re-stringify!
+      if (parentKey === "arguments" && (val.trim().startsWith("{") || val.trim().startsWith("["))) {
+        try {
+          return JSON.stringify(deepMaskAndScrub(JSON.parse(val), applyPathMask));
+        } catch {
+          // fall through to string scrubbing
+        }
+      }
       let s = scrubStage2(val);
       if (applyPathMask) {
         s = s.startsWith("/") || s.startsWith("~") || /^[A-Za-z]:\\/.test(s) ? maskPath(s) : maskInString(s);
@@ -190,7 +200,7 @@ function anonymizeAndScrub(jsonlContent, profile) {
     if (Array.isArray(val)) return val.map((item) => deepMaskAndScrub(item, applyPathMask));
     if (val && typeof val === "object") {
       return Object.fromEntries(
-        Object.entries(val).map(([k, v]) => [scrubStage2(k), deepMaskAndScrub(v, applyPathMask)])
+        Object.entries(val).map(([k, v]) => [scrubStage2(k), deepMaskAndScrub(v, applyPathMask, k)])
       );
     }
     return val;
@@ -200,28 +210,37 @@ function anonymizeAndScrub(jsonlContent, profile) {
   for (const line of jsonlContent.split(/\r?\n/)) {
     if (!line.trim()) continue;
     const entry = JSON.parse(line);
-    if (entry.type === "system" || entry.type === "file-history-snapshot") continue;
-    if (entry.message?.usage) delete entry.message.usage;
-    if (typeof entry.cwd === "string") entry.cwd = maskPath(entry.cwd);
-    if (entry.type === "assistant" && Array.isArray(entry.message?.content)) {
-      entry.message.content = entry.message.content
-        .filter((b) => b.type !== "thinking")
-        .map((b) => {
-          if (b.type === "tool_use" && b.input) b.input = deepMaskAndScrub(b.input, true);
-          if (b.type === "text" && typeof b.text === "string") b.text = deepMaskAndScrub(b.text, true);
-          return b;
-        });
-    }
-    if (entry.type === "user" && entry.message) {
-      if (typeof entry.message.content === "string") {
-        entry.message.content = deepMaskAndScrub(entry.message.content, true);
-      } else if (Array.isArray(entry.message.content)) {
-        entry.message.content = entry.message.content.map((b) =>
-          b.type === "tool_result" ? { ...b, content: "[removed]" } : deepMaskAndScrub(b, true)
-        );
+
+    // 1. Format-specific structural stripping (Claude Code + Codex)
+    if (entry.type === "system" || entry.type === "file-history-snapshot" || entry.type === "progress") continue;
+    if (entry.type === "event_msg" && entry.payload?.type === "token_count") continue;
+    if (entry.type === "response_item") {
+      const pt = entry.payload?.type;
+      if (pt === "reasoning" || (pt === "message" && entry.payload?.role === "developer")) continue;
+      if (pt === "function_call_output" || pt === "custom_tool_call_output") {
+        entry.payload.output = "[removed]";
       }
     }
-    outLines.push(JSON.stringify(entry));
+    if (entry.type === "session_meta" && entry.payload) {
+      if (entry.payload.git?.branch) entry.payload.git.branch = "branch-1";
+      if (entry.payload.git?.repository_url) entry.payload.git.repository_url = "https://github.com/user/repo-1.git";
+    }
+    if (entry.message?.usage) delete entry.message.usage;
+    if (entry.toolUseResult) delete entry.toolUseResult;
+    if (entry.gitBranch) entry.gitBranch = "branch-1";
+
+    if (entry.type === "assistant" && Array.isArray(entry.message?.content)) {
+      entry.message.content = entry.message.content.filter((b) => b.type !== "thinking");
+    }
+    if (entry.type === "user" && Array.isArray(entry.message?.content)) {
+      entry.message.content = entry.message.content.map((b) =>
+        b.type === "tool_result" ? { ...b, content: "[removed]" } : b
+      );
+    }
+
+    // 2. Universal whole-record deep scrubbing (eliminates blind spots on any extra top-level/nested fields!)
+    const scrubbed = deepMaskAndScrub(entry, true);
+    outLines.push(JSON.stringify(scrubbed));
   }
   return `${outLines.join("\n")}\n`;
 }
