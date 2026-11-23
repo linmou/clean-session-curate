@@ -6,7 +6,7 @@
   <title>Zero-Leak Agent Sessions: Replacing Regex Scrubbers with a 4-Pass Sharded Multi-Agent Pipeline</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #FAF9F6;
@@ -25,8 +25,6 @@
       --amber: #B45309;
       --amber-soft: #FFFBEB;
       --amber-border: #FDE68A;
-      --code-bg: #141B24;
-      --code-ink: #E5E7EB;
       --max-text: 700px;
       --max-wide: 960px;
     }
@@ -41,11 +39,15 @@
 
     body {
       margin: 0;
-      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 17px;
-      line-height: 1.72;
+      line-height: 1.74;
       -webkit-font-smoothing: antialiased;
     }
+
+    /* Instant CSS-driven Bilingual Visibility */
+    html[lang="en"] [data-lang="zh"] { display: none !important; }
+    html[lang="zh"] [data-lang="en"] { display: none !important; }
 
     /* Top progress bar */
     .progress-bar {
@@ -72,11 +74,11 @@
     .topbar-inner {
       max-width: var(--max-wide);
       margin: 0 auto;
-      padding: 12px 24px;
+      padding: 11px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
     }
 
@@ -99,9 +101,16 @@
       display: inline-block;
     }
 
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
     .nav-pills {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       flex-wrap: wrap;
     }
 
@@ -110,7 +119,7 @@
       font-size: 13px;
       font-weight: 500;
       color: var(--ink-muted);
-      padding: 4px 11px;
+      padding: 4px 10px;
       border-radius: 999px;
       transition: background 0.15s, color 0.15s;
     }
@@ -120,22 +129,58 @@
       color: var(--ink);
     }
 
+    /* Language Switcher Segmented Control */
+    .lang-switch {
+      display: inline-flex;
+      align-items: center;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .lang-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      font-family: "Inter", "Noto Sans SC", sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-muted);
+      padding: 4px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      line-height: 1.2;
+    }
+
+    .lang-btn:hover {
+      color: var(--ink);
+    }
+
+    .lang-btn.active {
+      background: var(--teal);
+      color: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(15, 118, 110, 0.25);
+    }
+
     /* Header / Hero */
     header.article-header {
       max-width: var(--max-wide);
       margin: 0 auto;
-      padding: 56px 24px 28px;
+      padding: 54px 24px 28px;
     }
 
     .kicker {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 12px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.07em;
       color: var(--teal);
       background: var(--teal-soft);
       border: 1px solid var(--teal-border);
@@ -145,21 +190,26 @@
     }
 
     h1 {
-      font-family: "Newsreader", Georgia, serif;
-      font-size: clamp(2.1rem, 4.4vw, 3.25rem);
-      line-height: 1.13;
-      letter-spacing: -0.025em;
+      font-family: "Newsreader", "Noto Serif SC", Georgia, serif;
+      font-size: clamp(2.05rem, 4.3vw, 3.15rem);
+      line-height: 1.18;
+      letter-spacing: -0.02em;
       font-weight: 700;
       margin: 0 0 20px;
       max-width: 860px;
       color: var(--ink);
     }
 
+    html[lang="zh"] h1 {
+      line-height: 1.28;
+      letter-spacing: -0.01em;
+    }
+
     .subtitle {
-      font-size: 1.18rem;
-      line-height: 1.58;
+      font-size: 1.16rem;
+      line-height: 1.62;
       color: var(--ink-muted);
-      max-width: 760px;
+      max-width: 780px;
       margin: 0 0 28px;
     }
 
@@ -194,7 +244,7 @@
     }
 
     .hook-eyebrow {
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 11.5px;
       font-weight: 700;
       text-transform: uppercase;
@@ -207,9 +257,9 @@
     }
 
     .hook-headline {
-      font-family: "Newsreader", Georgia, serif;
-      font-size: clamp(1.35rem, 2.5vw, 1.82rem);
-      line-height: 1.32;
+      font-family: "Newsreader", "Noto Serif SC", Georgia, serif;
+      font-size: clamp(1.32rem, 2.4vw, 1.78rem);
+      line-height: 1.38;
       font-weight: 600;
       margin: 0;
       color: #FFFFFF;
@@ -250,11 +300,11 @@
     }
 
     .compare-title {
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.07em;
+      letter-spacing: 0.06em;
     }
 
     .compare-col.baseline .compare-title { color: var(--crimson); }
@@ -268,23 +318,15 @@
       margin-bottom: 12px;
     }
 
-    .compare-metric:last-child {
-      margin-bottom: 0;
-    }
-
-    .compare-col.baseline .compare-metric {
-      border-left: 3px solid var(--crimson);
-    }
-
-    .compare-col.ours .compare-metric {
-      border-left: 3px solid var(--teal);
-    }
+    .compare-metric:last-child { margin-bottom: 0; }
+    .compare-col.baseline .compare-metric { border-left: 3px solid var(--crimson); }
+    .compare-col.ours .compare-metric { border-left: 3px solid var(--teal); }
 
     .kpi-value {
-      font-family: "Newsreader", Georgia, serif;
+      font-family: "Newsreader", "Noto Serif SC", Georgia, serif;
       font-size: 1.9rem;
       font-weight: 700;
-      line-height: 1.1;
+      line-height: 1.15;
       color: var(--ink);
       margin-bottom: 5px;
     }
@@ -295,7 +337,7 @@
     .kpi-label {
       font-size: 13.5px;
       color: var(--ink-muted);
-      line-height: 1.45;
+      line-height: 1.5;
     }
 
     /* Wide figures */
@@ -323,20 +365,16 @@
     .figure-caption {
       padding: 14px 20px;
       font-size: 13.5px;
-      line-height: 1.55;
+      line-height: 1.6;
       color: var(--ink-muted);
       border-top: 1px solid var(--border);
       background: #FCFBF9;
     }
 
-    .figure-caption strong {
-      color: var(--ink);
-    }
+    .figure-caption strong { color: var(--ink); }
 
     /* Main Prose Column */
-    main {
-      padding-bottom: 84px;
-    }
+    main { padding-bottom: 84px; }
 
     .prose {
       max-width: var(--max-text);
@@ -346,7 +384,7 @@
 
     .section-tag {
       display: inline-block;
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 11.5px;
       font-weight: 600;
       text-transform: uppercase;
@@ -357,10 +395,10 @@
     }
 
     h2 {
-      font-family: "Newsreader", Georgia, serif;
-      font-size: clamp(1.65rem, 3vw, 2.15rem);
-      line-height: 1.2;
-      letter-spacing: -0.02em;
+      font-family: "Newsreader", "Noto Serif SC", Georgia, serif;
+      font-size: clamp(1.62rem, 3vw, 2.1rem);
+      line-height: 1.26;
+      letter-spacing: -0.015em;
       margin: 0 0 18px;
       color: var(--ink);
     }
@@ -372,18 +410,9 @@
       color: var(--ink);
     }
 
-    p {
-      margin: 0 0 18px;
-    }
-
-    ul, ol {
-      margin: 0 0 20px;
-      padding-left: 22px;
-    }
-
-    li {
-      margin-bottom: 10px;
-    }
+    p { margin: 0 0 18px; }
+    ul, ol { margin: 0 0 20px; padding-left: 22px; }
+    li { margin-bottom: 10px; }
 
     code {
       font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -395,7 +424,6 @@
       color: #1E293B;
     }
 
-    /* Abstract Box */
     .abstract-box {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -406,43 +434,24 @@
       box-shadow: 0 2px 10px rgba(24, 34, 47, 0.03);
     }
 
-    .abstract-box p:last-child {
-      margin-bottom: 0;
-    }
+    .abstract-box p:last-child { margin-bottom: 0; }
 
-    /* Callouts */
     .callout {
       border-radius: 10px;
       padding: 18px 22px;
       margin: 24px 0;
       border: 1px solid var(--border);
       font-size: 15.5px;
-      line-height: 1.62;
+      line-height: 1.65;
     }
 
-    .callout.warning {
-      background: var(--crimson-soft);
-      border-color: var(--crimson-border);
-    }
-
+    .callout.warning { background: var(--crimson-soft); border-color: var(--crimson-border); }
     .callout.warning .callout-title { color: var(--crimson); }
-
-    .callout.note {
-      background: var(--teal-soft);
-      border-color: var(--teal-border);
-    }
-
+    .callout.note { background: var(--teal-soft); border-color: var(--teal-border); }
     .callout.note .callout-title { color: var(--teal); }
 
-    .callout.amber {
-      background: var(--amber-soft);
-      border-color: var(--amber-border);
-    }
-
-    .callout.amber .callout-title { color: var(--amber); }
-
     .callout-title {
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
@@ -450,7 +459,6 @@
       margin-bottom: 6px;
     }
 
-    /* SVG Diagram Container */
     .svg-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -500,20 +508,15 @@
       padding: 14px 16px;
       border-bottom: 1px solid #EFECE6;
       vertical-align: top;
-      line-height: 1.5;
+      line-height: 1.55;
     }
 
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    tbody tr.highlight-row {
-      background: #F2FBF9;
-    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr.highlight-row { background: #F2FBF9; }
 
     .badge {
       display: inline-block;
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 11.5px;
       font-weight: 600;
       padding: 2px 8px;
@@ -521,23 +524,9 @@
       vertical-align: middle;
     }
 
-    .badge.fail {
-      background: var(--crimson-soft);
-      color: var(--crimson);
-      border: 1px solid var(--crimson-border);
-    }
-
-    .badge.pass {
-      background: var(--teal-soft);
-      color: var(--teal);
-      border: 1px solid var(--teal-border);
-    }
-
-    .badge.frozen {
-      background: #EEF2FF;
-      color: #3730A3;
-      border: 1px solid #C7D2FE;
-    }
+    .badge.fail { background: var(--crimson-soft); color: var(--crimson); border: 1px solid var(--crimson-border); }
+    .badge.pass { background: var(--teal-soft); color: var(--teal); border: 1px solid var(--teal-border); }
+    .badge.frozen { background: #EEF2FF; color: #3730A3; border: 1px solid #C7D2FE; }
 
     /* Three-column limits grid */
     .limits-grid {
@@ -557,27 +546,16 @@
     }
 
     .limit-num {
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 12px;
       font-weight: 700;
       color: var(--amber);
       margin-bottom: 8px;
     }
 
-    .limit-card h4 {
-      margin: 0 0 8px;
-      font-size: 16px;
-      color: var(--ink);
-    }
+    .limit-card h4 { margin: 0 0 8px; font-size: 16px; color: var(--ink); }
+    .limit-card p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-muted); }
 
-    .limit-card p {
-      margin: 0;
-      font-size: 14.5px;
-      line-height: 1.58;
-      color: var(--ink-muted);
-    }
-
-    /* Takeaway footer card */
     .takeaway {
       background: var(--ink);
       color: #F3F4F6;
@@ -587,7 +565,7 @@
     }
 
     .takeaway-label {
-      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-family: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
       font-size: 11.5px;
       text-transform: uppercase;
       letter-spacing: 0.09em;
@@ -598,7 +576,7 @@
     .takeaway p {
       margin: 0;
       font-size: 16.5px;
-      line-height: 1.68;
+      line-height: 1.7;
       color: #E5E7EB;
     }
 
@@ -633,66 +611,108 @@
     <div class="topbar-inner">
       <div class="brand">
         <span class="brand-dot"></span>
-        clean-session-curate · engineering field report
+        <span data-lang="en">clean-session-curate · engineering field report</span>
+        <span data-lang="zh">clean-session-curate · 工程实测报告</span>
       </div>
-      <div class="nav-pills">
-        <a href="#abstract">Abstract</a>
-        <a href="#motivation">Motivation</a>
-        <a href="#method">Method</a>
-        <a href="#results">Results</a>
-        <a href="#limits">Limits</a>
+      <div class="topbar-right">
+        <div class="nav-pills" data-lang="en">
+          <a href="#abstract">Abstract</a>
+          <a href="#motivation">Motivation</a>
+          <a href="#method">Method</a>
+          <a href="#results">Results</a>
+          <a href="#limits">Limits</a>
+        </div>
+        <div class="nav-pills" data-lang="zh">
+          <a href="#abstract">摘要</a>
+          <a href="#motivation">背景动机</a>
+          <a href="#method">核心方法</a>
+          <a href="#results">实测结果</a>
+          <a href="#limits">已知边界</a>
+        </div>
+        <div class="lang-switch" role="group" aria-label="Language toggle">
+          <button type="button" class="lang-btn active" id="btnEn" onclick="setLang('en')">EN</button>
+          <button type="button" class="lang-btn" id="btnZh" onclick="setLang('zh')">中文</button>
+        </div>
       </div>
     </div>
   </nav>
 
   <header class="article-header">
-    <div class="kicker">Zero-Leak Agent Privacy · clean-session-curate</div>
-    <h1>Zero-Leak Agent Sessions: Replacing Regex Scrubbers with a 4-Pass Sharded Multi-Agent Pipeline</h1>
-    <p class="subtitle">
+    <div class="kicker" data-lang="en">Zero-Leak Agent Privacy · clean-session-curate</div>
+    <div class="kicker" data-lang="zh">智能体会话零泄漏脱敏 · clean-session-curate</div>
+
+    <h1 data-lang="en">Zero-Leak Agent Sessions: Replacing Regex Scrubbers with a 4-Pass Sharded Multi-Agent Pipeline</h1>
+    <h1 data-lang="zh">零泄漏分享你的智能体会话：用四阶段分片多智能体流水线取代正则清洗</h1>
+
+    <p class="subtitle" data-lang="en">
       How we upgraded <code>clean-session-curate</code> into a 4-Pass Sharded Multi-Agent Privacy Pipeline that catches both structured secrets and natural-language PII—achieving a first-shot zero-leak pass on 5.76 MB of unseen sessions without corrupting a single JSON line.
     </p>
-    <div class="meta-strip">
+    <p class="subtitle" data-lang="zh">
+      我们如何将开源技能 <code>clean-session-curate</code> 升级为「确定性 AST 清扫 + 分片多智能体语义猎手 + 盲测门禁」的四阶段隐私流水线，在完全未接触过的 5.76 MB 真实会话上首轮一次性实现零高危泄漏，且零损坏 JSON 结构。
+    </p>
+
+    <div class="meta-strip" data-lang="en">
       <span><strong>Frozen Commit:</strong> <code>b80590d</code> (26/26 tests)</span>
       <span><strong>Harnesses Tested:</strong> Claude Code · Codex · OpenCode v2 · pi</span>
       <span><strong>Uncontaminated Test:</strong> Holdout #3 (10 Claude Code &amp; Codex sessions, 6 disjoint projects)</span>
+    </div>
+    <div class="meta-strip" data-lang="zh">
+      <span><strong>冻结版本：</strong><code>b80590d</code>（26/26 单元测试通过）</span>
+      <span><strong>覆盖工具：</strong>Claude Code · Codex · OpenCode v2 · pi</span>
+      <span><strong>零污染终测：</strong>Holdout #3（10 条 Claude Code 与 Codex 会话，6 个未接触项目）</span>
     </div>
   </header>
 
   <!-- START / OPENING HOOK BEFORE ABSTRACT -->
   <section class="hook-section" id="start" aria-label="Opening hook and Baseline vs Ours comparison">
     <div class="hook-banner">
-      <div class="hook-eyebrow">⚠ Before You Zip That Session Log</div>
-      <p class="hook-headline">
+      <div class="hook-eyebrow" data-lang="en">⚠ Before You Zip That Session Log</div>
+      <div class="hook-eyebrow" data-lang="zh">⚠ 在你打包分享智能体日志之前</div>
+
+      <p class="hook-headline" data-lang="en">
         Sharing your agent session is not safe! A session cleaned by a privacy-protection tool passed 23/23 tests—then an Attacker Agent found out your name in minutes.
       </p>
+      <p class="hook-headline" data-lang="zh">
+        直接分享智能体会话并不安全！一份经隐私工具清洗并通过 23/23 项测试的会话日志，被盲测攻击智能体在几分钟内扒出了真实姓名与机构信息。
+      </p>
     </div>
+
     <div class="compare-grid">
       <div class="compare-col baseline">
         <div class="compare-header">
-          <span class="compare-title">Baseline / Deterministic-Only</span>
-          <span class="badge fail">UNSAFE</span>
+          <span class="compare-title" data-lang="en">Baseline / Deterministic-Only</span>
+          <span class="compare-title" data-lang="zh">基线方案 · 仅靠确定性规则</span>
+          <span class="badge fail" data-lang="en">UNSAFE</span>
+          <span class="badge fail" data-lang="zh">高危漏网</span>
         </div>
         <div class="compare-metric">
           <div class="kpi-value crimson">51 / 55</div>
-          <div class="kpi-label">Synthetic leak fragments exposed by the baseline scrubber (<strong>92.7% leaked</strong>)</div>
+          <div class="kpi-label" data-lang="en">Synthetic leak fragments exposed by the baseline scrubber (<strong>92.7% leaked</strong>)</div>
+          <div class="kpi-label" data-lang="zh">基线清洗器漏掉的合成敏感片段数（<strong>漏网率高达 92.7%</strong>）</div>
         </div>
         <div class="compare-metric">
           <div class="kpi-value crimson">Critical</div>
-          <div class="kpi-label">Blind-attacker risk on Holdout A1 &amp; A2 with deterministic-only scrubbing (<strong>23/23 tests</strong>)</div>
+          <div class="kpi-label" data-lang="en">Blind-attacker risk on Holdout A1 &amp; A2 with deterministic-only scrubbing (<strong>23/23 tests</strong>)</div>
+          <div class="kpi-label" data-lang="zh">仅靠确定性脚本（通过 <strong>23/23 测试</strong>）时，Holdout A1 与 A2 的盲测重识别风险仍为极高危</div>
         </div>
       </div>
+
       <div class="compare-col ours">
         <div class="compare-header">
-          <span class="compare-title">Ours · 4-Pass Sharded Multi-Agent</span>
-          <span class="badge pass">FIRST-SHOT PASS</span>
+          <span class="compare-title" data-lang="en">Ours · 4-Pass Sharded Multi-Agent</span>
+          <span class="compare-title" data-lang="zh">本文方案 · 四阶段分片多智能体</span>
+          <span class="badge pass" data-lang="en">FIRST-SHOT PASS</span>
+          <span class="badge pass" data-lang="zh">首轮一次通过</span>
         </div>
         <div class="compare-metric">
           <div class="kpi-value teal">0 / 0 / 0</div>
-          <div class="kpi-label">Critical / High / Medium leaks on strictly uncontaminated Holdout #3 (<strong>first shot</strong>)</div>
+          <div class="kpi-label" data-lang="en">Critical / High / Medium leaks on strictly uncontaminated Holdout #3 (<strong>first shot</strong>)</div>
+          <div class="kpi-label" data-lang="zh">在严格零污染 Holdout #3 测试集上的 严重 / 高危 / 中危 泄漏数（<strong>首轮零返工</strong>）</div>
         </div>
         <div class="compare-metric">
           <div class="kpi-value teal">10 / 10</div>
-          <div class="kpi-label">Raw source files byte-identical (SHA-256) with <strong>0 invalid JSON lines</strong> across 5.76 MB</div>
+          <div class="kpi-label" data-lang="en">Raw source files byte-identical (SHA-256) with <strong>0 invalid JSON lines</strong> across 5.76 MB</div>
+          <div class="kpi-label" data-lang="zh">原始会话文件字节级零改动（SHA-256 校验），5.76 MB 产物<strong>零损坏 JSON 行</strong></div>
         </div>
       </div>
     </div>
@@ -701,8 +721,11 @@
   <figure class="figure-wide">
     <div class="figure-frame">
       <img src="images/hero.jpg" alt="Editorial illustration of tangled raw coding-agent logs flowing through four translucent architectural privacy filter planes and emerging as clean structured blocks." />
-      <figcaption class="figure-caption">
+      <figcaption class="figure-caption" data-lang="en">
         <strong>Figure 1 — The 4-Pass Hybrid Privacy Filter.</strong> Raw multi-megabyte coding-agent logs carry both structured secrets and free-form human prose. Passing them through deterministic AST scrubbing, sharded semantic hunting, boundary-guarded literal redaction, and an independent blind verifier turns high-risk traces into clean, structurally intact exports.
+      </figcaption>
+      <figcaption class="figure-caption" data-lang="zh">
+        <strong>图 1 — 四阶段混合隐私过滤棱镜。</strong> 数 MB 的智能体会话日志同时混杂结构化密钥与自然语言对话。依次经过确定性 AST 清扫、分片多智能体语义猎手、带词边界守卫的词表替换与独立盲测门禁后，高风险日志被转化为结构完好、零高危泄漏的可分享切片。
       </figcaption>
     </div>
   </figure>
@@ -710,9 +733,13 @@
   <main>
     <!-- ABSTRACT -->
     <article class="prose" id="abstract">
-      <span class="section-tag">01 · Abstract</span>
-      <h2>The Short Version</h2>
-      <div class="abstract-box">
+      <span class="section-tag" data-lang="en">01 · Abstract</span>
+      <span class="section-tag" data-lang="zh">01 · 摘要（Abstract）</span>
+
+      <h2 data-lang="en">The Short Version</h2>
+      <h2 data-lang="zh">核心结论速览</h2>
+
+      <div class="abstract-box" data-lang="en">
         <p>
           We hardened <code>clean-session-curate</code>, an open-source skill for exporting anonymized coding-agent logs, using a deterministic AST scrubber and an adversarial evaluation loop. Even after driving synthetic fragment leaks from <strong>51/55 down to 0/63</strong> and passing <strong>23/23 unit tests</strong>, a fresh blind LLM attacker rated two unseen holdout sets as <strong>Critical re-identification risk</strong>—driven by plain-English and Chinese prose (advisor names, a 17-person org roster, street addresses, unpublished paper titles, and one-time passcodes) that regex cannot reliably detect.
         </p>
@@ -720,67 +747,109 @@
           We rebuilt the skill into a <strong>4-Pass Hybrid Pipeline</strong>: deterministic AST scrubbing, a <strong>sharded multi-agent Privacy Hunter</strong> (<code>max(20%, 20 KB)</code> shards with <code>10%</code> overlap plus a Merger agent), deterministic AST literal redaction with ASCII word-boundary guards, and a fresh blind Verifier gate. After freezing the skill at commit <code>b80590d</code> (<code>26/26</code> tests) and testing it one-shot on a <strong>strictly uncontaminated 5.76 MB Holdout #3</strong> (10 unseen Claude and Codex sessions across 6 disjoint projects), both blind verifiers returned a <strong>first-shot PASS (0 Critical, 0 High, 0 Medium leaks, utility intact, 10/10 raw SHA-256 unchanged)</strong>.
         </p>
       </div>
+
+      <div class="abstract-box" data-lang="zh">
+        <p>
+          围绕开源编程智能体会话脱敏技能 <code>clean-session-curate</code>，我们构建了一套对抗式评测与加固流程。实测发现：即便确定性 AST 清洗器已将合成敏感片段泄漏从 <strong>51/55 压降至 0/63</strong> 并通过全部 <strong>23/23 单元测试</strong>，无先验记忆的盲测攻击智能体仍在两组未见过的 Holdout 集上给出了 <strong>Critical（极高危重识别风险）</strong>——根源在于中英文自然语言正文中的导师与参与者姓名、17 人中文组织花名册及单姓简称、物理街道地址、未发表论文标题与一次性验证码，这些语义级隐私是正则表达式无法穷举的。
+        </p>
+        <p>
+          为此，我们将技能重构为<strong>四阶段混合流水线</strong>：Pass 1 确定性 AST 清扫 → Pass 2 <strong>分片多智能体隐私猎手</strong>（按 <code>max(20%, 20 KB)</code> 切分并保留 <code>10%</code> 边界重叠，配 1 个归并智能体）→ Pass 3 带 ASCII 词边界守卫的 AST 词表精确替换 → Pass 4 全新盲测验收门禁。在将技能冻结于提交 <code>b80590d</code>（<code>26/26</code> 测试通过）后，我们在<strong>严格零污染的 5.76 MB Holdout #3</strong>（来自 6 个全新项目的 10 条 Claude Code 与 Codex 会话）上一次性实测，两组盲测验收官均给出<strong>首轮 PASS（0 严重 / 0 高危 / 0 中危泄漏、任务效用完好、10/10 原始文件 SHA-256 零改动）</strong>。
+        </p>
+      </div>
     </article>
 
     <!-- MOTIVATION -->
     <article class="prose" id="motivation">
-      <span class="section-tag">02 · Motivation</span>
-      <h2>Why Regex Scrubbing Fails on Real Agent Logs</h2>
-      <p>
-        Sharing coding-agent transcripts for research, debugging, or postmortems is much harder than scrubbing ordinary server logs. A single Claude Code or Codex <code>.jsonl</code> trace mixes shell commands, JSON-encoded tool arguments, git status output, browser accessibility dumps, email snippets, and multi-turn conversation—often across several megabytes.
-      </p>
-      <p>
-        When we audited the baseline <code>clean-session-curate</code> workflow against real OpenCode v2, <code>pi</code>, Claude Code, and Codex sessions, three distinct failure modes surfaced immediately:
-      </p>
-      <ol>
-        <li>
-          <strong>Silent discovery and structural bypasses.</strong> Baseline discovery found <code>0/3</code> OpenCode v2 sessions because OpenCode had removed the <code>opencode db</code> CLI command the script relied on. Worse, the underlying Capsule <code>1.0.0</code> path masker skipped JSON arrays and Codex <code>session_meta</code> / <code>response_item</code> payloads—leaving <code>51/55</code> synthetic leak fragments exposed (<code>92.7%</code>) and causing an offline pre-API secret gate to block <code>27/28</code> real local sessions.
-        </li>
-        <li>
-          <strong>Regex collisions corrupting useful prose.</strong> Naive secret fixes backfired immediately: an unanchored <code>sk-</code> API-key pattern turned <code>task-notification</code> and <code>risk-assessment</code> into <code>ta[REDACTED]</code> and <code>ri[REDACTED]</code> across <code>9/10</code> local traces, while a generic path masker rewrote <code>#!/usr/bin/env node</code> into a synthetic project path.
-        </li>
-        <li>
-          <strong>The regex ceiling on natural-language PII.</strong> Even after we fixed every structural bug, anchored secret patterns, added read-only SQLite discovery (<code>mode=ro&amp;immutable=1</code> so WAL/SHM files never mutate), and passed <code>23/23</code> unit tests, a fresh blind LLM attacker broke both unseen holdout sets in minutes.
-        </li>
-      </ol>
+      <span class="section-tag" data-lang="en">02 · Motivation</span>
+      <span class="section-tag" data-lang="zh">02 · 背景动机（Motivation）</span>
 
-      <div class="callout warning">
+      <h2 data-lang="en">Why Regex Scrubbing Fails on Real Agent Logs</h2>
+      <h2 data-lang="zh">为什么纯正则清洗在真实智能体日志面前必然失效</h2>
+
+      <div data-lang="en">
+        <p>
+          Sharing coding-agent transcripts for research, debugging, or postmortems is much harder than scrubbing ordinary server logs. A single Claude Code or Codex <code>.jsonl</code> trace mixes shell commands, JSON-encoded tool arguments, git status output, browser accessibility dumps, email snippets, and multi-turn conversation—often across several megabytes.
+        </p>
+        <p>
+          When we audited the baseline <code>clean-session-curate</code> workflow against real OpenCode v2, <code>pi</code>, Claude Code, and Codex sessions, three distinct failure modes surfaced immediately:
+        </p>
+        <ol>
+          <li>
+            <strong>Silent discovery and structural bypasses.</strong> Baseline discovery found <code>0/3</code> OpenCode v2 sessions because OpenCode had removed the <code>opencode db</code> CLI command the script relied on. Worse, the underlying Capsule <code>1.0.0</code> path masker skipped JSON arrays and Codex <code>session_meta</code> / <code>response_item</code> payloads—leaving <code>51/55</code> synthetic leak fragments exposed (<code>92.7%</code>) and causing an offline pre-API secret gate to block <code>27/28</code> real local sessions.
+          </li>
+          <li>
+            <strong>Regex collisions corrupting useful prose.</strong> Naive secret fixes backfired immediately: an unanchored <code>sk-</code> API-key pattern turned <code>task-notification</code> and <code>risk-assessment</code> into <code>ta[REDACTED]</code> and <code>ri[REDACTED]</code> across <code>9/10</code> local traces, while a generic path masker rewrote <code>#!/usr/bin/env node</code> into a synthetic project path.
+          </li>
+          <li>
+            <strong>The regex ceiling on natural-language PII.</strong> Even after we fixed every structural bug, anchored secret patterns, added read-only SQLite discovery (<code>mode=ro&amp;immutable=1</code> so WAL/SHM files never mutate), and passed <code>23/23</code> unit tests, a fresh blind LLM attacker broke both unseen holdout sets in minutes.
+          </li>
+        </ol>
+      </div>
+
+      <div data-lang="zh">
+        <p>
+          在科研评测、团队复盘或训练语料沉淀中分享编程智能体会话，难度远高于普通后端日志脱敏。单份 Claude Code 或 Codex 的 <code>.jsonl</code> 会话动辄数 MB，内部交织着终端命令、JSON 字符串化的工具入参、Git 状态记录、浏览器无障碍树快照、邮件片段与多轮自由对话。
+        </p>
+        <p>
+          当我们对 OpenCode v2、<code>pi</code>、Claude Code 与 Codex 的真实会话审计基线版 <code>clean-session-curate</code> 时，三类致命缺陷立刻浮出水面：
+        </p>
+        <ol>
+          <li>
+            <strong>静默发现失效与结构级绕过。</strong> OpenCode v2 移除了旧版依赖的 <code>opencode db</code> 子命令，导致基线发现率为 <code>0/3</code> 且无任何报错；更严重的是，底层依赖的 Capsule <code>1.0.0</code> 路径脱敏函数不递归 JSON 数组，也不识别 Codex 的 <code>session_meta</code> / <code>response_item</code> 结构，导致 <code>51/55</code> 个合成敏感片段直接漏网（<code>92.7%</code>），本地离线密钥门禁更是拦截了 <code>27/28</code> 条真实会话。
+          </li>
+          <li>
+            <strong>正则误伤破坏正常技术文本。</strong> 简单粗暴地补正则会立刻破坏语料可用性：未加词边界锚定的 <code>sk-</code> 规则把 <code>9/10</code> 条会话里的英文词 <code>task-notification</code> 和 <code>risk-assessment</code> 截断成了 <code>ta[REDACTED]</code> 与 <code>ri[REDACTED]</code>；宽泛路径规则甚至把脚本头 <code>#!/usr/bin/env node</code> 改写成了假路径。
+          </li>
+          <li>
+            <strong>纯正则无法逾越的自然语言 PII 天花板。</strong> 即便我们修复了全部结构漏洞、使用 <code>mode=ro&amp;immutable=1</code> 锁死 SQLite 只读访问（保证 WAL/SHM 零改动）并通过了 <code>23/23</code> 项单元测试，盲测攻击智能体依然在几分钟内攻破了两组未见过的 Holdout 测试集。
+          </li>
+        </ol>
+      </div>
+
+      <div class="callout warning" data-lang="en">
         <div class="callout-title">Observed Failure · Deterministic-Only Holdout Attack (Commit 0b6f5ea)</div>
         <strong>Holdout A1 (12 local Claude/Codex traces) → <code>reid_risk: Critical</code>.</strong> Recovered participant and advisor names, university and campus room details, an IRB protocol ID, unpublished manuscript titles, provider account/thread IDs, and an email-bearing JWT + OTP.<br /><br />
         <strong>Holdout A2 (9 public-repo OpenCode/<code>pi</code> traces) → <code>reid_risk: Critical</code>.</strong> Recovered a 17-person Chinese org roster, single-character surname shorthands, a physical street address with local landmarks, and a verbatim published recruitment slogan.
       </div>
 
-      <p>
+      <div class="callout warning" data-lang="zh">
+        <div class="callout-title">实测翻车记录 · 纯确定性清洗遭遇盲测攻击（提交 0b6f5ea）</div>
+        <strong>Holdout A1（12 条本地 Claude/Codex 会话）→ <code>reid_risk: Critical</code>。</strong> 攻击者直接还原出导师与研讨会参与者真名、大学与教学楼房间号、伦理审批号（IRB）、未发表论文标题、平台账户/线程 ID，以及内含邮箱的 JWT 与一次性验证码。<br /><br />
+        <strong>Holdout A2（9 条公开仓 OpenCode/<code>pi</code> 会话）→ <code>reid_risk: Critical</code>。</strong> 攻击者还原出 17 人中文团队花名册、同会话内的单姓简称、精确到门牌号与地标的物理街道地址，以及逐字可搜的公众号招聘口号。
+      </div>
+
+      <p data-lang="en">
         No amount of regex tuning can tell a workshop participant's first name from a code identifier, or a street address from a test fixture. Conversely, asking an LLM to hand-edit a 5 MB JSONL file fails in the opposite direction: models truncate long logs, break JSON escaping, and miss scattered occurrences.
+      </p>
+      <p data-lang="zh">
+        无论怎么调正则表达式，代码都不可能区分“参会者的英文名”与“普通变量名”，也无法预知哪一句中文是真实办公地址；反过来，如果直接让大模型手改 5 MB 的 JSONL 原文，又会引发长文本截断、JSON 转义损坏与同词漏改。
       </p>
     </article>
 
     <!-- METHOD -->
     <article class="prose" id="method">
-      <span class="section-tag">03 · Method</span>
-      <h2>The 4-Pass Hybrid Multi-Agent Pipeline</h2>
-      <p>
+      <span class="section-tag" data-lang="en">03 · Method</span>
+      <span class="section-tag" data-lang="zh">03 · 核心方法（Method）</span>
+
+      <h2 data-lang="en">The 4-Pass Hybrid Multi-Agent Pipeline</h2>
+      <h2 data-lang="zh">四阶段混合分片多智能体流水线</h2>
+
+      <p data-lang="en">
         Because <code>clean-session-curate</code> is an <strong>agent skill</strong>, we stopped treating it like a standalone regex CLI. Instead, we drew a clean boundary: <strong>deterministic code owns every file write and AST walk</strong>, while <strong>read-only agents own semantic discovery and adversarial verification</strong>.
+      </p>
+      <p data-lang="zh">
+        既然 <code>clean-session-curate</code> 本身就是一个<strong>智能体技能（Agent Skill）</strong>，就不该把它当成死板的纯正则脚本。我们划定了清晰的职责边界：<strong>确定性代码独占所有文件读写与 AST 语法树遍历</strong>，而<strong>只读子智能体专职负责语义级隐私发现与对抗式盲测验收</strong>。
       </p>
     </article>
 
-    <!-- Custom Inline SVG Architecture Diagram -->
+    <!-- Custom Inline SVG Architecture Diagram (EN + ZH versions) -->
     <figure class="figure-wide">
-      <div class="svg-card">
+      <div class="svg-card" data-lang="en">
         <svg viewBox="0 0 920 355" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="4-Pass Hybrid Multi-Agent Pipeline Architecture">
           <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" />
-            </marker>
-            <marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 1 L 10 5 L 0 9 z" fill="#0F766E" />
-            </marker>
-            <marker id="arrow-crimson" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 1 L 10 5 L 0 9 z" fill="#B91C1C" />
-            </marker>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" /></marker>
+            <marker id="arrow-crimson" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#B91C1C" /></marker>
           </defs>
-
-          <!-- Legend -->
           <rect x="20" y="10" width="12" height="12" rx="3" fill="#F1F5F9" stroke="#334155" stroke-width="1.5" />
           <text x="38" y="20" font-family="Inter, sans-serif" font-size="11.5" fill="#475569">Deterministic Code (AST / I/O)</text>
           <rect x="225" y="10" width="12" height="12" rx="3" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.5" />
@@ -788,7 +857,6 @@
           <rect x="425" y="10" width="12" height="12" rx="3" fill="#FEF2F2" stroke="#B91C1C" stroke-width="1.5" />
           <text x="443" y="20" font-family="Inter, sans-serif" font-size="11.5" fill="#B91C1C">Adversarial Retry Loop</text>
 
-          <!-- Pass 1 -->
           <rect x="20" y="55" width="185" height="120" rx="10" fill="#F8FAFC" stroke="#334155" stroke-width="1.8" />
           <text x="34" y="79" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#334155">PASS 1 · CODE</text>
           <text x="34" y="100" font-family="Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">Deterministic AST Scrub</text>
@@ -796,38 +864,29 @@
           <text x="34" y="139" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Mask paths, keys, IPs, SHAs</text>
           <text x="34" y="157" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Raw SHA-256 untouched</text>
 
-          <!-- Arrow 1->2 -->
           <line x1="205" y1="115" x2="238" y2="115" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)" />
 
-          <!-- Pass 2 Container -->
           <rect x="244" y="42" width="232" height="222" rx="12" fill="#F2FBF9" stroke="#0F766E" stroke-width="1.8" stroke-dasharray="5 3" />
           <text x="258" y="64" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#0F766E">PASS 2 · SHARDED AGENTS</text>
-
-          <!-- Chunker box -->
           <rect x="258" y="74" width="204" height="44" rx="7" fill="#FFFFFF" stroke="#334155" stroke-width="1.4" />
           <text x="268" y="93" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600" fill="#18222F">chunk_for_hunter.mjs</text>
           <text x="268" y="109" font-family="Inter, sans-serif" font-size="11" fill="#4B5563">max(20%, 20 KB) + 10% overlap</text>
 
-          <!-- Parallel Hunters -->
           <rect x="258" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
           <text x="266" y="151" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">Hunter 1</text>
           <text x="266" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_01</text>
-
           <rect x="329" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
           <text x="337" y="151" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">Hunter 2</text>
           <text x="337" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_02</text>
-
           <rect x="400" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
           <text x="408" y="151" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">Hunter N</text>
           <text x="408" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_0N</text>
 
-          <!-- Merger box -->
           <rect x="258" y="194" width="204" height="56" rx="7" fill="#0F766E" />
           <text x="270" y="216" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#FFFFFF">1 Merger Agent</text>
           <text x="270" y="233" font-family="Inter, sans-serif" font-size="11" fill="#CCFBF1">Dedup · unify tags · propagate</text>
           <text x="270" y="245" font-family="JetBrains Mono, monospace" font-size="10" fill="#99F6E4">→ tmp-redaction-terms.json</text>
 
-          <!-- Internal arrows Pass 2 -->
           <line x1="289" y1="118" x2="289" y2="129" stroke="#0F766E" stroke-width="1.3" />
           <line x1="360" y1="118" x2="360" y2="129" stroke="#0F766E" stroke-width="1.3" />
           <line x1="431" y1="118" x2="431" y2="129" stroke="#0F766E" stroke-width="1.3" />
@@ -835,10 +894,8 @@
           <line x1="360" y1="176" x2="360" y2="191" stroke="#0F766E" stroke-width="1.3" />
           <line x1="431" y1="176" x2="385" y2="191" stroke="#0F766E" stroke-width="1.3" />
 
-          <!-- Arrow 2->3 -->
           <line x1="476" y1="150" x2="509" y2="150" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)" />
 
-          <!-- Pass 3 -->
           <rect x="515" y="90" width="185" height="120" rx="10" fill="#F8FAFC" stroke="#334155" stroke-width="1.8" />
           <text x="529" y="114" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#334155">PASS 3 · CODE</text>
           <text x="529" y="135" font-family="Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">AST --terms Scrub</text>
@@ -846,10 +903,8 @@
           <text x="529" y="174" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• ASCII word-boundary guard</text>
           <text x="529" y="192" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Delete temp shards/terms</text>
 
-          <!-- Arrow 3->4 -->
           <line x1="700" y1="150" x2="733" y2="150" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)" />
 
-          <!-- Pass 4 -->
           <rect x="739" y="82" width="162" height="136" rx="10" fill="#E6F4F1" stroke="#0F766E" stroke-width="2" />
           <text x="752" y="106" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#0F766E">PASS 4 · GATE</text>
           <text x="752" y="127" font-family="Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">Fresh Blind Verifier</text>
@@ -858,20 +913,100 @@
           <rect x="752" y="180" width="136" height="26" rx="5" fill="#0F766E" />
           <text x="766" y="197" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600" fill="#FFFFFF">PASS → ZIP Ready</text>
 
-          <!-- Feedback loop arrow -->
           <path d="M 820 218 L 820 315 L 360 315 L 360 270" fill="none" stroke="#B91C1C" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrow-crimson)" />
           <rect x="495" y="299" width="235" height="28" rx="14" fill="#FEF2F2" stroke="#FECACA" stroke-width="1.2" />
           <text x="510" y="317" font-family="Inter, sans-serif" font-size="11.5" font-weight="600" fill="#B91C1C">Any Critical/High? Feed back to Pass 2</text>
         </svg>
       </div>
-      <figcaption class="figure-caption">
+
+      <div class="svg-card" data-lang="zh">
+        <svg viewBox="0 0 920 355" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="四阶段混合多智能体流水线架构图">
+          <defs>
+            <marker id="arrow-zh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" /></marker>
+            <marker id="arrow-crimson-zh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#B91C1C" /></marker>
+          </defs>
+          <rect x="20" y="10" width="12" height="12" rx="3" fill="#F1F5F9" stroke="#334155" stroke-width="1.5" />
+          <text x="38" y="20" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#475569">确定性脚本（AST 遍历与文件读写）</text>
+          <rect x="245" y="10" width="12" height="12" rx="3" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.5" />
+          <text x="263" y="20" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#0F766E">只读智能体 / 子智能体</text>
+          <rect x="425" y="10" width="12" height="12" rx="3" fill="#FEF2F2" stroke="#B91C1C" stroke-width="1.5" />
+          <text x="443" y="20" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#B91C1C">未通过门禁时自动回流闭环</text>
+
+          <rect x="20" y="55" width="185" height="120" rx="10" fill="#F8FAFC" stroke="#334155" stroke-width="1.8" />
+          <text x="34" y="79" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#334155">PASS 1 · 确定性代码</text>
+          <text x="34" y="101" font-family="Noto Sans SC, Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">全记录 AST 结构清扫</text>
+          <text x="34" y="122" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#4B5563">• 剥离元数据与账户 UUID</text>
+          <text x="34" y="140" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#4B5563">• 遮蔽路径、密钥、IP、SHA</text>
+          <text x="34" y="158" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#4B5563">• 原始文件 SHA-256 零改动</text>
+
+          <line x1="205" y1="115" x2="238" y2="115" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow-zh)" />
+
+          <rect x="244" y="42" width="232" height="222" rx="12" fill="#F2FBF9" stroke="#0F766E" stroke-width="1.8" stroke-dasharray="5 3" />
+          <text x="258" y="64" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="11" font-weight="700" fill="#0F766E">PASS 2 · 分片多智能体</text>
+          <rect x="258" y="74" width="204" height="44" rx="7" fill="#FFFFFF" stroke="#334155" stroke-width="1.4" />
+          <text x="268" y="93" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600" fill="#18222F">chunk_for_hunter.mjs</text>
+          <text x="268" y="109" font-family="Noto Sans SC, Inter, sans-serif" font-size="11" fill="#4B5563">max(20%, 20 KB) + 10% 边界重叠</text>
+
+          <rect x="258" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
+          <text x="268" y="151" font-family="Noto Sans SC, Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">猎手 1</text>
+          <text x="266" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_01</text>
+          <rect x="329" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
+          <text x="339" y="151" font-family="Noto Sans SC, Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">猎手 2</text>
+          <text x="337" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_02</text>
+          <rect x="400" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
+          <text x="410" y="151" font-family="Noto Sans SC, Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">猎手 N</text>
+          <text x="408" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_0N</text>
+
+          <rect x="258" y="194" width="204" height="56" rx="7" fill="#0F766E" />
+          <text x="270" y="216" font-family="Noto Sans SC, Inter, sans-serif" font-size="12.5" font-weight="700" fill="#FFFFFF">1 个归并智能体（Merger）</text>
+          <text x="270" y="233" font-family="Noto Sans SC, Inter, sans-serif" font-size="11" fill="#CCFBF1">去重 · 统一标签 · 跨片传播简称</text>
+          <text x="270" y="245" font-family="JetBrains Mono, monospace" font-size="10" fill="#99F6E4">→ tmp-redaction-terms.json</text>
+
+          <line x1="289" y1="118" x2="289" y2="129" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="360" y1="118" x2="360" y2="129" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="431" y1="118" x2="431" y2="129" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="289" y1="176" x2="335" y2="191" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="360" y1="176" x2="360" y2="191" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="431" y1="176" x2="385" y2="191" stroke="#0F766E" stroke-width="1.3" />
+
+          <line x1="476" y1="150" x2="509" y2="150" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow-zh)" />
+
+          <rect x="515" y="90" width="185" height="120" rx="10" fill="#F8FAFC" stroke="#334155" stroke-width="1.8" />
+          <text x="529" y="114" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="11" font-weight="700" fill="#334155">PASS 3 · 确定性代码</text>
+          <text x="529" y="136" font-family="Noto Sans SC, Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">AST 词表精确替换</text>
+          <text x="529" y="157" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#4B5563">• 最长匹配优先遍历 AST</text>
+          <text x="529" y="175" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#4B5563">• ASCII 词边界守卫防误伤</text>
+          <text x="529" y="193" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#4B5563">• 立即销毁临时分片与词表</text>
+
+          <line x1="700" y1="150" x2="733" y2="150" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow-zh)" />
+
+          <rect x="739" y="82" width="162" height="136" rx="10" fill="#E6F4F1" stroke="#0F766E" stroke-width="2" />
+          <text x="752" y="106" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="11" font-weight="700" fill="#0F766E">PASS 4 · 盲测门禁</text>
+          <text x="752" y="128" font-family="Noto Sans SC, Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">全新盲测验收智能体</text>
+          <text x="752" y="149" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#334155">零先验上下文独立重识别</text>
+          <text x="752" y="166" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" fill="#334155">校验 0 严重 / 0 高危泄漏</text>
+          <rect x="752" y="180" width="136" height="26" rx="5" fill="#0F766E" />
+          <text x="766" y="197" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="11" font-weight="600" fill="#FFFFFF">PASS → 允许打包 ZIP</text>
+
+          <path d="M 820 218 L 820 315 L 360 315 L 360 270" fill="none" stroke="#B91C1C" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrow-crimson-zh)" />
+          <rect x="495" y="299" width="235" height="28" rx="14" fill="#FEF2F2" stroke="#FECACA" stroke-width="1.2" />
+          <text x="515" y="317" font-family="Noto Sans SC, Inter, sans-serif" font-size="11.5" font-weight="600" fill="#B91C1C">检出严重/高危残留？回流至 Pass 2</text>
+        </svg>
+      </div>
+
+      <figcaption class="figure-caption" data-lang="en">
         <strong>Figure 2 — Separation of Concerns.</strong> Deterministic scripts (slate) perform all JSONL parsing and replacement; read-only agents (teal) only read bounded text and return structured JSON verdicts or term lists.
+      </figcaption>
+      <figcaption class="figure-caption" data-lang="zh">
+        <strong>图 2 — 职责彻底解耦。</strong> 确定性脚本（深灰）负责全部 JSONL 解析与词条替换，杜绝格式损坏；只读智能体（青绿）仅审阅有界文本分片并返回结构化 JSON 词表或验收结论。
       </figcaption>
     </figure>
 
     <article class="prose">
-      <h3>Three Design Decisions That Actually Moved the Needle</h3>
-      <ul>
+      <h3 data-lang="en">Three Design Decisions That Actually Moved the Needle</h3>
+      <h3 data-lang="zh">真正决定成败的三项工程设计</h3>
+
+      <ul data-lang="en">
         <li>
           <strong>Sharding Pass 2 into <code>max(20%, 20 KB)</code> slices with <code>10%</code> overlap.</strong> In our first hybrid prototype (Holdout A1 &amp; A2), a single Privacy Hunter scanning megabytes of JSONL missed subtle clues buried in noise—forcing 2 to 4 retry loops with the Blind Verifier. Our chunker (<code>scripts/chunk_for_hunter.mjs</code>) slices the Pass-1 corpus into bounded overlapping shards (including splitting giant single JSONL lines) so every parallel Hunter keeps sharp attention and no entity spanning a boundary is lost. One <strong>Merger agent</strong> then deduplicates overlapping terms and propagates cross-shard shorthands.
         </li>
@@ -882,57 +1017,80 @@
           <strong>A fresh blind verifier as a hard packaging gate.</strong> Pass 4 spawns a brand-new read-only verifier with zero memory of Passes 1–3. Once loud leaks (full names, rosters, tokens) are gone, second-order clues that were invisible in noise—like a single Chinese surname or a regex bucket alternation—stand out immediately.
         </li>
       </ul>
+
+      <ul data-lang="zh">
+        <li>
+          <strong>Pass 2 按 <code>max(20%, 20 KB)</code> 分片并保留 <code>10%</code> 边界重叠。</strong> 在早期单猎手原型（Holdout A1 与 A2）中，单个智能体面对数 MB 日志容易注意力稀释，遗漏淹没在噪声里的细微线索，导致需要与盲测门禁往返 2～4 轮才能收敛。新增的 <code>scripts/chunk_for_hunter.mjs</code> 将语料切分为有界重叠分片（超长单行 JSONL 也会自动重叠切片），让每个并行 Hunter 保持高召回率且不丢跨边界实体，最后由 <strong>1 个 Merger 智能体</strong>统一去重并跨片补全简称。
+        </li>
+        <li>
+          <strong><code>--terms</code> 的 ASCII 字母数字边界守卫。</strong> 当智能体提取出 <code>PSU</code> 或 <code>Erie</code> 这类短缩写时，裸子串替换会把正常英文词 <code>capsule</code> 和 <code>experience</code> 破坏掉。我们在 <code>anonymize_session.mjs</code> 中对首尾为 <code>[A-Za-z0-9]</code> 的词条自动包裹 <code>(?&lt;![A-Za-z0-9])...(?![A-Za-z0-9])</code> 边界守卫，同时让中文词条在无空格的中文句子里保持精准匹配。
+        </li>
+        <li>
+          <strong>以“零先验盲测验收”作为打包硬门禁。</strong> Pass 4 启动一个对前序步骤毫无记忆的全新只读智能体。当显眼的大块隐私（全名、花名册、长密钥）被清干净后，原本藏在噪声里的二阶线索——如中文单姓简称或正则桶名前缀——会立刻暴露在盲测视野中。
+        </li>
+      </ul>
     </article>
 
     <figure class="figure-wide">
       <div class="figure-frame">
         <img src="images/sharded-hunters.jpg" alt="Editorial illustration of a data ribbon sliced into six overlapping translucent panels inspected by parallel geometric lens nodes converging into a central crystalline merger hub." />
-        <figcaption class="figure-caption">
+        <figcaption class="figure-caption" data-lang="en">
           <strong>Figure 3 — Sharded Multi-Agent Hunting + Merger.</strong> On Holdout #3 (5.76 MB), six parallel Hunter agents each reviewed a 1.15 MB slice with 115 KB boundary overlap, extracting 222 raw candidates that one Merger agent consolidated into 180 clean, longest-first redaction terms.
+        </figcaption>
+        <figcaption class="figure-caption" data-lang="zh">
+          <strong>图 3 — 分片多智能体并行狩猎与归并中心。</strong> 在 5.76 MB 的 Holdout #3 上，6 个并行 Hunter 各自审阅 1.15 MB 分片（含 115 KB 边界重叠），共提取 222 条原始候选词，经 1 个 Merger 智能体去重与跨片关联后收敛为 180 条高质量脱敏词条。
         </figcaption>
       </div>
     </figure>
 
     <!-- RESULTS -->
     <article class="prose" id="results">
-      <span class="section-tag">04 · Results</span>
-      <h2>Empirical Progression and an Uncontaminated Holdout Check</h2>
-      <p>
+      <span class="section-tag" data-lang="en">04 · Results</span>
+      <span class="section-tag" data-lang="zh">04 · 实测结果（Results）</span>
+
+      <h2 data-lang="en">Empirical Progression and an Uncontaminated Holdout Check</h2>
+      <h2 data-lang="zh">多轮演进数据与严格零污染 Holdout 终测</h2>
+
+      <p data-lang="en">
         A common trap in adversarial engineering is accidentally turning your holdout set into a second dev set. We fell into that trap honestly—and caught it before claiming victory.
       </p>
+      <p data-lang="zh">
+        对抗式工程中最容易踩的陷阱，就是在根据测试集报错修完代码后，不知不觉把 Holdout 测试集变成了“第二开发集”。我们坦诚识别出了这一风险，并在宣布成功前补上了真正的零污染终测。
+      </p>
 
-      <div class="callout note">
+      <div class="callout note" data-lang="en">
         <div class="callout-title">Why We Built Holdout #3 (Zero-Contamination Protocol)</div>
         Once we inspected Holdout A1 and A2 failures to add deterministic rules (<code>session-owner</code>, provider <code>user-</code>/<code>thread_</code> IDs, <code>commit:</code> short SHAs) and Hunter checklist hints, A1 and A2 were no longer untouched blind tests. To prove the architecture generalizes without overfitting, we <strong>froze the skill at commit <code>b80590d</code> (26/26 tests)</strong> before sampling <strong>Holdout #3</strong> from 6 completely disjoint local projects—and ran it one-shot with zero edits allowed.
       </div>
+
+      <div class="callout note" data-lang="zh">
+        <div class="callout-title">为什么要专门构建 Holdout #3（严格零污染协议）</div>
+        当我们根据 Holdout A1 与 A2 的早期失败补充了确定性规则（<code>session-owner</code>、平台 <code>user-</code>/<code>thread_</code> ID、短 Commit SHA）及猎手提示词后，A1 与 A2 在科学意义上已不再是“盲测集”。为了排除任何过拟合嫌疑，我们在接触新数据前<strong>先将技能代码冻结在提交 <code>b80590d</code>（26/26 测试通过）</strong>，随后从 6 个此前从未接触过的本地项目中抽取 <strong>Holdout #3</strong>，在零代码改动前提下一次性运行完整流水线。
+      </div>
     </article>
 
-    <!-- Results Progression Visual Chart (SVG) -->
+    <!-- Results Progression Visual Chart (SVG EN + ZH) -->
     <figure class="figure-wide">
-      <div class="svg-card">
+      <div class="svg-card" data-lang="en">
         <svg viewBox="0 0 920 275" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Progression of Blind Verifier Risk and Loops Needed Across Skill Iterations">
           <text x="24" y="28" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#18222F">Blind-Verifier Outcome Across Iterations (Lower Risk &amp; Fewer Loops = Better)</text>
           <text x="24" y="46" font-family="Inter, sans-serif" font-size="12" fill="#6B7280">Comparing deterministic-only scrubbing, single-hunter hybrid, and frozen sharded multi-agent on unseen holdouts</text>
 
-          <!-- Baseline bar -->
           <text x="24" y="88" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">Deterministic Only (0b6f5ea)</text>
           <text x="24" y="104" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6B7280">Holdout A1 &amp; A2 · 23/23 tests</text>
           <rect x="250" y="72" width="560" height="32" rx="6" fill="#FEE2E2" stroke="#EF4444" stroke-width="1.5" />
           <text x="266" y="93" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#B91C1C">FAIL · CRITICAL RE-ID RISK (Both Holdouts)</text>
 
-          <!-- Single Hunter A1 -->
           <text x="24" y="144" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">Hybrid Single-Hunter (33662da)</text>
           <text x="24" y="160" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6B7280">Holdout A1 (12 traces) · 2 loops</text>
           <rect x="250" y="128" width="210" height="32" rx="6" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5" />
           <text x="264" y="149" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="#92400E">PASS (Low) · 2 Loops</text>
 
-          <!-- Single Hunter A2 -->
           <text x="24" y="200" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">Hybrid Single-Hunter (33662da)</text>
           <text x="24" y="216" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6B7280">Holdout A2 (9 traces) · 4 loops</text>
           <rect x="250" y="184" width="330" height="32" rx="6" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5" />
           <text x="264" y="205" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="#92400E">PASS (None, 0 findings) · 4 Loops</text>
 
-          <!-- Frozen Sharded Holdout #3 -->
           <text x="24" y="254" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#0F766E">Frozen Sharded Multi-Agent (b80590d)</text>
           <text x="24" y="270" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#0F766E">Holdout #3 (5.76 MB, 6 unseen repos)</text>
           <rect x="250" y="238" width="120" height="32" rx="6" fill="#0F766E" />
@@ -940,11 +1098,39 @@
           <text x="384" y="259" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#0F766E">PASS (Low) · 0 Crit / 0 High / 0 Med · 1 Loop</text>
         </svg>
       </div>
+
+      <div class="svg-card" data-lang="zh">
+        <svg viewBox="0 0 920 275" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="各迭代版本盲测风险与收敛轮数对比图">
+          <text x="24" y="28" font-family="Noto Sans SC, Inter, sans-serif" font-size="14" font-weight="700" fill="#18222F">各版本盲测重识别风险与收敛轮数对比（风险越低、轮数越少越好）</text>
+          <text x="24" y="46" font-family="Noto Sans SC, Inter, sans-serif" font-size="12" fill="#6B7280">对比纯确定性脚本、单猎手四阶段混合方案与冻结版分片多智能体方案在未见测试集上的表现</text>
+
+          <text x="24" y="88" font-family="Noto Sans SC, Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">仅确定性脚本 (0b6f5ea)</text>
+          <text x="24" y="104" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="10.5" fill="#6B7280">Holdout A1 &amp; A2 · 23/23 测试</text>
+          <rect x="250" y="72" width="560" height="32" rx="6" fill="#FEE2E2" stroke="#EF4444" stroke-width="1.5" />
+          <text x="266" y="93" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="12" font-weight="700" fill="#B91C1C">FAIL · 两组 Holdout 均为 CRITICAL 极高危重识别风险</text>
+
+          <text x="24" y="144" font-family="Noto Sans SC, Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">四阶段单猎手混合版 (33662da)</text>
+          <text x="24" y="160" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="10.5" fill="#6B7280">Holdout A1（12 条会话）· 2 轮收敛</text>
+          <rect x="250" y="128" width="210" height="32" rx="6" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5" />
+          <text x="264" y="149" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="11.5" font-weight="700" fill="#92400E">PASS (Low) · 2 轮通过</text>
+
+          <text x="24" y="200" font-family="Noto Sans SC, Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">四阶段单猎手混合版 (33662da)</text>
+          <text x="24" y="216" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="10.5" fill="#6B7280">Holdout A2（9 条会话）· 4 轮收敛</text>
+          <rect x="250" y="184" width="330" height="32" rx="6" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5" />
+          <text x="264" y="205" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="11.5" font-weight="700" fill="#92400E">PASS (None, 0 发现) · 4 轮通过</text>
+
+          <text x="24" y="254" font-family="Noto Sans SC, Inter, sans-serif" font-size="12.5" font-weight="700" fill="#0F766E">冻结版分片多智能体 (b80590d)</text>
+          <text x="24" y="270" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="10.5" fill="#0F766E">Holdout #3（5.76 MB，6 个全新项目）</text>
+          <rect x="250" y="238" width="120" height="32" rx="6" fill="#0F766E" />
+          <text x="264" y="259" font-family="JetBrains Mono, Noto Sans SC, monospace" font-size="11.5" font-weight="700" fill="#FFFFFF">首轮通过</text>
+          <text x="384" y="259" font-family="Noto Sans SC, Inter, sans-serif" font-size="12.5" font-weight="700" fill="#0F766E">PASS (Low) · 0 严重 / 0 高危 / 0 中危 · 仅 1 轮</text>
+        </svg>
+      </div>
     </figure>
 
-    <!-- Full Evidence Table -->
+    <!-- Full Evidence Table (EN + ZH) -->
     <div class="table-wrap">
-      <div class="table-card">
+      <div class="table-card" data-lang="en">
         <table>
           <thead>
             <tr>
@@ -1000,66 +1186,179 @@
           </tbody>
         </table>
       </div>
+
+      <div class="table-card" data-lang="zh">
+        <table>
+          <thead>
+            <tr>
+              <th>评测阶段 / 提交</th>
+              <th>测试语料</th>
+              <th>流水线形态</th>
+              <th>盲测验收结果</th>
+              <th>效用与源文件完整性</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Phase 1 基线</strong><br /><code>e0edc8f</code></td>
+              <td>Track B0 + 20 条公开会话</td>
+              <td>原始基线（19/19 测试）</td>
+              <td><span class="badge fail">FAIL</span> 51/55 敏感片段漏网 · OpenCode v2 发现 0/3</td>
+              <td>良性命令最大误伤率 40%</td>
+            </tr>
+            <tr>
+              <td><strong>Phase 1 确定性加固</strong><br /><code>cf7b8c6</code></td>
+              <td>Track B0 + 20 条公开会话</td>
+              <td>全记录 AST 清扫 + SQLite <code>ro&amp;immutable=1</code></td>
+              <td><span class="badge pass">PASS</span> 0/63 敏感片段泄漏 · OpenCode v2 发现 3/3</td>
+              <td>良性误伤率 0% · 效用均分 4.55/5</td>
+            </tr>
+            <tr>
+              <td><strong>Phase 2 纯确定性</strong><br /><code>0b6f5ea</code></td>
+              <td>Holdout A1（12 条本地）与 A2（9 条公开）</td>
+              <td>仅确定性脚本（23/23 测试）</td>
+              <td><span class="badge fail">FAIL</span> A1 与 A2 均为 <strong>Critical</strong> 极高危</td>
+              <td>0 损坏 JSON 行</td>
+            </tr>
+            <tr>
+              <td><strong>四阶段单猎手混合版</strong><br /><code>33662da</code></td>
+              <td>Holdout A1（12 条）与 A2（9 条）</td>
+              <td>四阶段混合流水线，单猎手（24/24 测试）</td>
+              <td>
+                A1：<span class="badge pass">PASS</span> Low（2 轮收敛）<br />
+                A2：<span class="badge pass">PASS</span> None，0 发现（4 轮收敛）
+              </td>
+              <td><code>utility_intact: true</code> · 12/12 原始 SHA-256 不变</td>
+            </tr>
+            <tr class="highlight-row">
+              <td><strong>冻结版分片多智能体</strong><br /><code>b80590d</code> <span class="badge frozen">已冻结</span></td>
+              <td><strong>Holdout #3</strong>：10 条全新本地会话（5.76 MB，6 个未接触项目）</td>
+              <td>6 并行 Hunter（<code>max(20%, 20 KB)</code> + 10% 重叠）+ 1 Merger（26/26 测试）</td>
+              <td>
+                Claude (4)：<span class="badge pass">首轮 PASS</span> Low（0 严重/高危/中危）<br />
+                Codex (6)：<span class="badge pass">首轮 PASS</span> Low（0 严重/高危/中危）
+              </td>
+              <td><code>utility_intact: true</code> · 10/10 原始 SHA-256 不变 · 0 损坏 JSON 行</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <article class="prose">
-      <p>
+      <p data-lang="en">
         On the strictly uncontaminated 5.76 MB Holdout #3 corpus, sharding changed the game. Six parallel Hunter agents inspected <code>1.15 MB</code> shards with <code>115 KB</code> overlap and caught 22 student names, 18 handles, 6 partially masked phone numbers, an IP-bearing <code>sslip.io</code> hostname, a shared artifact URL, and private repo names—all on Pass 2. The Merger agent deduplicated <code>222</code> raw candidates into <code>180</code> clean terms, Pass 3 applied them with zero JSON corruption, and both fresh blind verifiers passed on <strong>Loop 1</strong>. Only minor Low-severity residue remained (opaque API <code>req_</code> IDs, coarse timezone labels, a typo-glued RFC1918 LAN IP, and a 2-character UI truncation).
+      </p>
+      <p data-lang="zh">
+        在严格零污染的 5.76 MB Holdout #3 语料上，分片并行机制彻底改变了战局：6 个并行 Hunter 智能体各自深挖 <code>1.15 MB</code> 分片（含 <code>115 KB</code> 重叠区），在 Pass 2 一次性揪出了 22 个中文学生真名、18 个昵称/账号、6 个半遮蔽手机号、内嵌公网 IP 的 <code>sslip.io</code> 域名、分享链接及全部私有仓库名。Merger 智能体将 <code>222</code> 条候选词去重整合为 <code>180</code> 条词表，Pass 3 零损坏完成 AST 替换，最终两组盲测验收智能体在<strong>第 1 轮（Loop 1）即一次性给出 PASS</strong>——仅剩少量不影响隐私安全的低风险项（不透明 API <code>req_</code> 请求号、粗粒度时区缩写、一处紧贴英文词的内网保留 IP 以及 2 字符 UI 截断前缀）。
       </p>
     </article>
 
     <figure class="figure-wide">
       <div class="figure-frame">
         <img src="images/blind-gate.jpg" alt="Editorial illustration of a sleek inspection gate scanning a neat stack of anonymized document cards before sealing a luminous teal archive parcel." />
-        <figcaption class="figure-caption">
+        <figcaption class="figure-caption" data-lang="en">
           <strong>Figure 4 — Pass 4 Fresh Blind Verification Gate.</strong> No archive is packaged until a brand-new verifier with zero memory of prior passes confirms 0 Critical and 0 High leaks across the exported traces.
+        </figcaption>
+        <figcaption class="figure-caption" data-lang="zh">
+          <strong>图 4 — Pass 4 全新盲测零泄漏门禁。</strong> 只有当无任何前序上下文记忆的独立盲测智能体确认导出目录中严重（Critical）与高危（High）泄漏均为 0 时，系统才允许生成最终的 ZIP 归档包。
         </figcaption>
       </div>
     </figure>
 
     <!-- LIMITS & TAKEAWAY -->
     <article class="prose" id="limits">
-      <span class="section-tag">05 · Honest Limits</span>
-      <h2>Where This Architecture Still Has Boundaries</h2>
-      <p>
+      <span class="section-tag" data-lang="en">05 · Honest Limits</span>
+      <span class="section-tag" data-lang="zh">05 · 已知边界（Honest Limits）</span>
+
+      <h2 data-lang="en">Where This Architecture Still Has Boundaries</h2>
+      <h2 data-lang="zh">当前架构仍需注意的三条工程边界</h2>
+
+      <p data-lang="en">
         The skill is ready for daily real-world use, and far safer than deterministic scrubbing alone—but three concrete limits remain worth engineering before a broad upstream release:
+      </p>
+      <p data-lang="zh">
+        该技能已具备日常生产可用性，安全性远超传统纯正则方案；但在更大规模推广前，仍有三处边界值得坦诚说明：
       </p>
     </article>
 
     <section class="limits-grid" aria-label="Known limitations">
       <div class="limit-card">
-        <div class="limit-num">LIMIT 01 · SCALING</div>
-        <h4>Giant Exports (&gt;15 MB) Need a Ceiling</h4>
-        <p><code>max(20%, 20 KB)</code> worked cleanly at 5.76 MB (~1.15 MB/shard), but on a 30 MB export, 20% would yield 6 MB shards. Capping shard size at <code>500 KB</code> keeps Hunter recall high at any scale.</p>
+        <div class="limit-num" data-lang="en">LIMIT 01 · SCALING</div>
+        <div class="limit-num" data-lang="zh">边界 01 · 超大语料上限</div>
+        <h4 data-lang="en">Giant Exports (&gt;15 MB) Need a Ceiling</h4>
+        <h4 data-lang="zh">超大导出包（&gt;15 MB）需加分片上限</h4>
+        <p data-lang="en"><code>max(20%, 20 KB)</code> worked cleanly at 5.76 MB (~1.15 MB/shard), but on a 30 MB export, 20% would yield 6 MB shards. Capping shard size at <code>500 KB</code> keeps Hunter recall high at any scale.</p>
+        <p data-lang="zh"><code>max(20%, 20 KB)</code> 在 5.76 MB 语料上（约 1.15 MB/片）表现极佳，但若遇到 30 MB 导出包，20% 会产生 6 MB 大分片。后续加上 <code>500 KB</code> 硬上限即可适配任意体量。</p>
       </div>
       <div class="limit-card">
-        <div class="limit-num">LIMIT 02 · VERIFIER</div>
-        <h4>Shard Pass 4 Automatically Too</h4>
-        <p>On Holdout #3 we manually split Pass 4 into two verifiers (Claude and Codex) to keep review depth sharp. <code>SKILL.md</code> should reuse <code>chunk_for_hunter.mjs</code> for Pass 4 whenever exports exceed ~1 MB.</p>
+        <div class="limit-num" data-lang="en">LIMIT 02 · VERIFIER</div>
+        <div class="limit-num" data-lang="zh">边界 02 · 门禁自动分片</div>
+        <h4 data-lang="en">Shard Pass 4 Automatically Too</h4>
+        <h4 data-lang="zh">Pass 4 盲测门禁同样应当自动分片</h4>
+        <p data-lang="en">On Holdout #3 we manually split Pass 4 into two verifiers (Claude and Codex) to keep review depth sharp. <code>SKILL.md</code> should reuse <code>chunk_for_hunter.mjs</code> for Pass 4 whenever exports exceed ~1 MB.</p>
+        <p data-lang="zh">在 Holdout #3 评测中，我们将 Pass 4 按 Claude 与 Codex 拆成两个盲测官以保证审查深度；下一步可在语料超过 1 MB 时直接复用 <code>chunk_for_hunter.mjs</code> 自动分片验收。</p>
       </div>
       <div class="limit-card">
-        <div class="limit-num">LIMIT 03 · PORTABILITY</div>
-        <h4>Host-Agent &amp; Windows CI</h4>
-        <p>Pass 1 is pure Node.js 20+ and runs anywhere, but Passes 2 and 4 rely on a host agent that supports subagents (or sequential shard loops). All runs were verified on macOS; Windows CI is still pending.</p>
+        <div class="limit-num" data-lang="en">LIMIT 03 · PORTABILITY</div>
+        <div class="limit-num" data-lang="zh">边界 03 · 宿主与跨平台验证</div>
+        <h4 data-lang="en">Host-Agent &amp; Windows CI</h4>
+        <h4 data-lang="zh">宿主子智能体能力与 Windows CI</h4>
+        <p data-lang="en">Pass 1 is pure Node.js 20+ and runs anywhere, but Passes 2 and 4 rely on a host agent that supports subagents (or sequential shard loops). All runs were verified on macOS; Windows CI is still pending.</p>
+        <p data-lang="zh">Pass 1 为纯 Node.js 20+ 脚本可随处运行，但 Pass 2 与 Pass 4 依赖宿主支持只读子智能体（或按分片顺序串行审阅）。本文实验均在 macOS 完成，Windows CI 仍待补齐。</p>
       </div>
     </section>
 
     <article class="prose">
       <div class="takeaway">
-        <div class="takeaway-label">Portable Takeaway</div>
-        <p>
+        <div class="takeaway-label" data-lang="en">Portable Takeaway</div>
+        <div class="takeaway-label" data-lang="zh">可迁移的工程启示</div>
+        <p data-lang="en">
           If you are building privacy tooling inside an agent workflow, don't force regex to understand human prose, and don't let an LLM hand-edit raw logs. Let deterministic code own the AST and file I/O, shard semantic hunting into bounded overlapping chunks so no agent loses focus, and require a fresh blind verifier to sign off before anything gets zipped.
+        </p>
+        <p data-lang="zh">
+          在智能体工作流里做隐私安全，既不要逼正则表达式去理解人类散文，也不要让大模型直接手改原始日志文件。让确定性代码独占 AST 与文件读写，用带重叠区的有界分片让只读猎手保持敏锐注意力，最后用零先验的盲测验收官把守打包大门——这才是真正可靠的零泄漏范式。
         </p>
       </div>
     </article>
   </main>
 
   <footer>
-    <span>Generated from verified experiment artifacts · Commits <code>b80590d</code> &amp; <code>caa73bf</code></span>
-    <span>All personal identifiers sanitized · Zero raw session content included</span>
+    <span data-lang="en">Generated from verified experiment artifacts · Commits <code>b80590d</code> &amp; <code>caa73bf</code></span>
+    <span data-lang="zh">基于真实可复现实验产物生成 · 对应提交 <code>b80590d</code> 与 <code>caa73bf</code></span>
+    <span data-lang="en">All personal identifiers sanitized · Zero raw session content included</span>
+    <span data-lang="zh">全部个人与机构敏感标识均已脱敏 · 不含任何原始会话内容</span>
   </footer>
 
   <script>
+    const TITLES = {
+      en: "Zero-Leak Agent Sessions: Replacing Regex Scrubbers with a 4-Pass Sharded Multi-Agent Pipeline",
+      zh: "零泄漏分享你的智能体会话：用四阶段分片多智能体流水线取代正则清洗"
+    };
+
+    function setLang(lang, pushUrl = true) {
+      const normalized = lang === "zh" ? "zh" : "en";
+      document.documentElement.lang = normalized;
+      document.title = TITLES[normalized];
+      document.getElementById("btnEn").classList.toggle("active", normalized === "en");
+      document.getElementById("btnZh").classList.toggle("active", normalized === "zh");
+      try { localStorage.setItem("curate_report_lang", normalized); } catch {}
+      if (pushUrl && window.history && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("lang", normalized);
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+
+    (function initLang() {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get("lang");
+      let saved = null;
+      try { saved = localStorage.getItem("curate_report_lang"); } catch {}
+      if (q === "zh" || q === "en") setLang(q, false);
+      else if (saved === "zh" || saved === "en") setLang(saved, false);
+    })();
+
     window.addEventListener("scroll", () => {
       const h = document.documentElement;
       const pct = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100;
