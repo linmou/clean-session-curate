@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zero-Leak Agent Sessions: Replacing Regex Scrubbers with a 4-Pass Sharded Multi-Agent Pipeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #FAF9F6;
+      --surface: #FFFFFF;
+      --surface-subtle: #F3F1EC;
+      --ink: #18222F;
+      --ink-muted: #4B5563;
+      --ink-faint: #6B7280;
+      --border: #E5E2DC;
+      --teal: #0F766E;
+      --teal-soft: #E6F4F1;
+      --teal-border: #99D5CB;
+      --crimson: #B91C1C;
+      --crimson-soft: #FEF2F2;
+      --crimson-border: #FECACA;
+      --amber: #B45309;
+      --amber-soft: #FFFBEB;
+      --amber-border: #FDE68A;
+      --code-bg: #141B24;
+      --code-ink: #E5E7EB;
+      --max-text: 700px;
+      --max-wide: 960px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    body {
+      margin: 0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 17px;
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top progress bar */
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      width: 0%;
+      background: linear-gradient(90deg, var(--teal), #14B8A6);
+      z-index: 100;
+      transition: width 0.08s linear;
+    }
+
+    /* Sticky minimal nav */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(250, 249, 246, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-inner {
+      max-width: var(--max-wide);
+      margin: 0 auto;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--teal);
+      display: inline-block;
+    }
+
+    .nav-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .nav-pills a {
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-muted);
+      padding: 4px 11px;
+      border-radius: 999px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-pills a:hover {
+      background: var(--surface-subtle);
+      color: var(--ink);
+    }
+
+    /* Header / Hero */
+    header.article-header {
+      max-width: var(--max-wide);
+      margin: 0 auto;
+      padding: 56px 24px 28px;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--teal);
+      background: var(--teal-soft);
+      border: 1px solid var(--teal-border);
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(2.1rem, 4.4vw, 3.25rem);
+      line-height: 1.13;
+      letter-spacing: -0.025em;
+      font-weight: 700;
+      margin: 0 0 20px;
+      max-width: 860px;
+      color: var(--ink);
+    }
+
+    .subtitle {
+      font-size: 1.18rem;
+      line-height: 1.58;
+      color: var(--ink-muted);
+      max-width: 760px;
+      margin: 0 0 28px;
+    }
+
+    .meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      font-size: 13.5px;
+      color: var(--ink-faint);
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .meta-strip span strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    /* Opening Hook + Baseline vs Ours Comparison */
+    .hook-section {
+      max-width: var(--max-wide);
+      margin: 8px auto 38px;
+      padding: 0 24px;
+    }
+
+    .hook-banner {
+      background: linear-gradient(135deg, #18222F 0%, #243244 100%);
+      color: #F9FAFB;
+      border-radius: 14px 14px 0 0;
+      padding: 26px 28px;
+      border: 1px solid #18222F;
+    }
+
+    .hook-eyebrow {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #FCA5A5;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hook-headline {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.35rem, 2.5vw, 1.82rem);
+      line-height: 1.32;
+      font-weight: 600;
+      margin: 0;
+      color: #FFFFFF;
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 14px 14px;
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: 0 8px 28px rgba(24, 34, 47, 0.06);
+    }
+
+    .compare-col {
+      padding: 22px 24px 24px;
+    }
+
+    .compare-col.baseline {
+      background: #FFFDFD;
+      border-right: 1px solid var(--border);
+    }
+
+    .compare-col.ours {
+      background: #F7FCFB;
+    }
+
+    .compare-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 14px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .compare-title {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .compare-col.baseline .compare-title { color: var(--crimson); }
+    .compare-col.ours .compare-title { color: var(--teal); }
+
+    .compare-metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 15px 17px;
+      margin-bottom: 12px;
+    }
+
+    .compare-metric:last-child {
+      margin-bottom: 0;
+    }
+
+    .compare-col.baseline .compare-metric {
+      border-left: 3px solid var(--crimson);
+    }
+
+    .compare-col.ours .compare-metric {
+      border-left: 3px solid var(--teal);
+    }
+
+    .kpi-value {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: 1.9rem;
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--ink);
+      margin-bottom: 5px;
+    }
+
+    .kpi-value.teal { color: var(--teal); }
+    .kpi-value.crimson { color: var(--crimson); }
+
+    .kpi-label {
+      font-size: 13.5px;
+      color: var(--ink-muted);
+      line-height: 1.45;
+    }
+
+    /* Wide figures */
+    .figure-wide {
+      max-width: var(--max-wide);
+      margin: 32px auto 40px;
+      padding: 0 24px;
+    }
+
+    .figure-frame {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 6px 24px rgba(24, 34, 47, 0.05);
+    }
+
+    .figure-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #FAF9F6;
+    }
+
+    .figure-caption {
+      padding: 14px 20px;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: var(--ink-muted);
+      border-top: 1px solid var(--border);
+      background: #FCFBF9;
+    }
+
+    .figure-caption strong {
+      color: var(--ink);
+    }
+
+    /* Main Prose Column */
+    main {
+      padding-bottom: 84px;
+    }
+
+    .prose {
+      max-width: var(--max-text);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .section-tag {
+      display: inline-block;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--teal);
+      margin-top: 52px;
+      margin-bottom: 6px;
+    }
+
+    h2 {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.65rem, 3vw, 2.15rem);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin: 0 0 18px;
+      color: var(--ink);
+    }
+
+    h3 {
+      font-size: 1.12rem;
+      font-weight: 700;
+      margin: 28px 0 10px;
+      color: var(--ink);
+    }
+
+    p {
+      margin: 0 0 18px;
+    }
+
+    ul, ol {
+      margin: 0 0 20px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin-bottom: 10px;
+    }
+
+    code {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.86em;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      padding: 1.5px 5.5px;
+      border-radius: 5px;
+      color: #1E293B;
+    }
+
+    /* Abstract Box */
+    .abstract-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--teal);
+      border-radius: 10px;
+      padding: 24px 26px;
+      margin: 12px 0 28px;
+      box-shadow: 0 2px 10px rgba(24, 34, 47, 0.03);
+    }
+
+    .abstract-box p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Callouts */
+    .callout {
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin: 24px 0;
+      border: 1px solid var(--border);
+      font-size: 15.5px;
+      line-height: 1.62;
+    }
+
+    .callout.warning {
+      background: var(--crimson-soft);
+      border-color: var(--crimson-border);
+    }
+
+    .callout.warning .callout-title { color: var(--crimson); }
+
+    .callout.note {
+      background: var(--teal-soft);
+      border-color: var(--teal-border);
+    }
+
+    .callout.note .callout-title { color: var(--teal); }
+
+    .callout.amber {
+      background: var(--amber-soft);
+      border-color: var(--amber-border);
+    }
+
+    .callout.amber .callout-title { color: var(--amber); }
+
+    .callout-title {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    /* SVG Diagram Container */
+    .svg-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 20px 18px;
+      box-shadow: 0 6px 24px rgba(24, 34, 47, 0.04);
+    }
+
+    .svg-card svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Data Table */
+    .table-wrap {
+      max-width: var(--max-wide);
+      margin: 28px auto 36px;
+      padding: 0 24px;
+    }
+
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow-x: auto;
+      box-shadow: 0 4px 18px rgba(24, 34, 47, 0.04);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14.5px;
+      text-align: left;
+    }
+
+    thead th {
+      background: #F7F5F0;
+      color: var(--ink);
+      font-weight: 600;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #EFECE6;
+      vertical-align: top;
+      line-height: 1.5;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr.highlight-row {
+      background: #F2FBF9;
+    }
+
+    .badge {
+      display: inline-block;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      vertical-align: middle;
+    }
+
+    .badge.fail {
+      background: var(--crimson-soft);
+      color: var(--crimson);
+      border: 1px solid var(--crimson-border);
+    }
+
+    .badge.pass {
+      background: var(--teal-soft);
+      color: var(--teal);
+      border: 1px solid var(--teal-border);
+    }
+
+    .badge.frozen {
+      background: #EEF2FF;
+      color: #3730A3;
+      border: 1px solid #C7D2FE;
+    }
+
+    /* Three-column limits grid */
+    .limits-grid {
+      max-width: var(--max-wide);
+      margin: 24px auto 36px;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .limit-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+    }
+
+    .limit-num {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--amber);
+      margin-bottom: 8px;
+    }
+
+    .limit-card h4 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      color: var(--ink);
+    }
+
+    .limit-card p {
+      margin: 0;
+      font-size: 14.5px;
+      line-height: 1.58;
+      color: var(--ink-muted);
+    }
+
+    /* Takeaway footer card */
+    .takeaway {
+      background: var(--ink);
+      color: #F3F4F6;
+      border-radius: 14px;
+      padding: 28px 30px;
+      margin-top: 36px;
+    }
+
+    .takeaway-label {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #5EEAD4;
+      margin-bottom: 10px;
+    }
+
+    .takeaway p {
+      margin: 0;
+      font-size: 16.5px;
+      line-height: 1.68;
+      color: #E5E7EB;
+    }
+
+    footer {
+      max-width: var(--max-wide);
+      margin: 0 auto;
+      padding: 28px 24px 56px;
+      border-top: 1px solid var(--border);
+      font-size: 13.5px;
+      color: var(--ink-faint);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    @media (max-width: 820px) {
+      .compare-grid { grid-template-columns: 1fr; }
+      .compare-col.baseline { border-right: none; border-bottom: 1px solid var(--border); }
+      .limits-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      body { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress-bar" id="progressBar"></div>
+
+  <nav class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        clean-session-curate · engineering field report
+      </div>
+      <div class="nav-pills">
+        <a href="#abstract">Abstract</a>
+        <a href="#motivation">Motivation</a>
+        <a href="#method">Method</a>
+        <a href="#results">Results</a>
+        <a href="#limits">Limits</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="article-header">
+    <div class="kicker">Zero-Leak Agent Privacy · clean-session-curate</div>
+    <h1>Zero-Leak Agent Sessions: Replacing Regex Scrubbers with a 4-Pass Sharded Multi-Agent Pipeline</h1>
+    <p class="subtitle">
+      How we upgraded <code>clean-session-curate</code> into a 4-Pass Sharded Multi-Agent Privacy Pipeline that catches both structured secrets and natural-language PII—achieving a first-shot zero-leak pass on 5.76 MB of unseen sessions without corrupting a single JSON line.
+    </p>
+    <div class="meta-strip">
+      <span><strong>Frozen Commit:</strong> <code>b80590d</code> (26/26 tests)</span>
+      <span><strong>Harnesses Tested:</strong> Claude Code · Codex · OpenCode v2 · pi</span>
+      <span><strong>Uncontaminated Test:</strong> Holdout #3 (10 Claude Code &amp; Codex sessions, 6 disjoint projects)</span>
+    </div>
+  </header>
+
+  <!-- START / OPENING HOOK BEFORE ABSTRACT -->
+  <section class="hook-section" id="start" aria-label="Opening hook and Baseline vs Ours comparison">
+    <div class="hook-banner">
+      <div class="hook-eyebrow">⚠ Before You Zip That Session Log</div>
+      <p class="hook-headline">
+        Sharing your agent session is not safe! A session cleaned by a privacy-protection tool passed 23/23 tests—then an Attacker Agent found out your name in minutes.
+      </p>
+    </div>
+    <div class="compare-grid">
+      <div class="compare-col baseline">
+        <div class="compare-header">
+          <span class="compare-title">Baseline / Deterministic-Only</span>
+          <span class="badge fail">UNSAFE</span>
+        </div>
+        <div class="compare-metric">
+          <div class="kpi-value crimson">51 / 55</div>
+          <div class="kpi-label">Synthetic leak fragments exposed by the baseline scrubber (<strong>92.7% leaked</strong>)</div>
+        </div>
+        <div class="compare-metric">
+          <div class="kpi-value crimson">Critical</div>
+          <div class="kpi-label">Blind-attacker risk on Holdout A1 &amp; A2 with deterministic-only scrubbing (<strong>23/23 tests</strong>)</div>
+        </div>
+      </div>
+      <div class="compare-col ours">
+        <div class="compare-header">
+          <span class="compare-title">Ours · 4-Pass Sharded Multi-Agent</span>
+          <span class="badge pass">FIRST-SHOT PASS</span>
+        </div>
+        <div class="compare-metric">
+          <div class="kpi-value teal">0 / 0 / 0</div>
+          <div class="kpi-label">Critical / High / Medium leaks on strictly uncontaminated Holdout #3 (<strong>first shot</strong>)</div>
+        </div>
+        <div class="compare-metric">
+          <div class="kpi-value teal">10 / 10</div>
+          <div class="kpi-label">Raw source files byte-identical (SHA-256) with <strong>0 invalid JSON lines</strong> across 5.76 MB</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <figure class="figure-wide">
+    <div class="figure-frame">
+      <img src="images/hero.jpg" alt="Editorial illustration of tangled raw coding-agent logs flowing through four translucent architectural privacy filter planes and emerging as clean structured blocks." />
+      <figcaption class="figure-caption">
+        <strong>Figure 1 — The 4-Pass Hybrid Privacy Filter.</strong> Raw multi-megabyte coding-agent logs carry both structured secrets and free-form human prose. Passing them through deterministic AST scrubbing, sharded semantic hunting, boundary-guarded literal redaction, and an independent blind verifier turns high-risk traces into clean, structurally intact exports.
+      </figcaption>
+    </div>
+  </figure>
+
+  <main>
+    <!-- ABSTRACT -->
+    <article class="prose" id="abstract">
+      <span class="section-tag">01 · Abstract</span>
+      <h2>The Short Version</h2>
+      <div class="abstract-box">
+        <p>
+          We hardened <code>clean-session-curate</code>, an open-source skill for exporting anonymized coding-agent logs, using a deterministic AST scrubber and an adversarial evaluation loop. Even after driving synthetic fragment leaks from <strong>51/55 down to 0/63</strong> and passing <strong>23/23 unit tests</strong>, a fresh blind LLM attacker rated two unseen holdout sets as <strong>Critical re-identification risk</strong>—driven by plain-English and Chinese prose (advisor names, a 17-person org roster, street addresses, unpublished paper titles, and one-time passcodes) that regex cannot reliably detect.
+        </p>
+        <p>
+          We rebuilt the skill into a <strong>4-Pass Hybrid Pipeline</strong>: deterministic AST scrubbing, a <strong>sharded multi-agent Privacy Hunter</strong> (<code>max(20%, 20 KB)</code> shards with <code>10%</code> overlap plus a Merger agent), deterministic AST literal redaction with ASCII word-boundary guards, and a fresh blind Verifier gate. After freezing the skill at commit <code>b80590d</code> (<code>26/26</code> tests) and testing it one-shot on a <strong>strictly uncontaminated 5.76 MB Holdout #3</strong> (10 unseen Claude and Codex sessions across 6 disjoint projects), both blind verifiers returned a <strong>first-shot PASS (0 Critical, 0 High, 0 Medium leaks, utility intact, 10/10 raw SHA-256 unchanged)</strong>.
+        </p>
+      </div>
+    </article>
+
+    <!-- MOTIVATION -->
+    <article class="prose" id="motivation">
+      <span class="section-tag">02 · Motivation</span>
+      <h2>Why Regex Scrubbing Fails on Real Agent Logs</h2>
+      <p>
+        Sharing coding-agent transcripts for research, debugging, or postmortems is much harder than scrubbing ordinary server logs. A single Claude Code or Codex <code>.jsonl</code> trace mixes shell commands, JSON-encoded tool arguments, git status output, browser accessibility dumps, email snippets, and multi-turn conversation—often across several megabytes.
+      </p>
+      <p>
+        When we audited the baseline <code>clean-session-curate</code> workflow against real OpenCode v2, <code>pi</code>, Claude Code, and Codex sessions, three distinct failure modes surfaced immediately:
+      </p>
+      <ol>
+        <li>
+          <strong>Silent discovery and structural bypasses.</strong> Baseline discovery found <code>0/3</code> OpenCode v2 sessions because OpenCode had removed the <code>opencode db</code> CLI command the script relied on. Worse, the underlying Capsule <code>1.0.0</code> path masker skipped JSON arrays and Codex <code>session_meta</code> / <code>response_item</code> payloads—leaving <code>51/55</code> synthetic leak fragments exposed (<code>92.7%</code>) and causing an offline pre-API secret gate to block <code>27/28</code> real local sessions.
+        </li>
+        <li>
+          <strong>Regex collisions corrupting useful prose.</strong> Naive secret fixes backfired immediately: an unanchored <code>sk-</code> API-key pattern turned <code>task-notification</code> and <code>risk-assessment</code> into <code>ta[REDACTED]</code> and <code>ri[REDACTED]</code> across <code>9/10</code> local traces, while a generic path masker rewrote <code>#!/usr/bin/env node</code> into a synthetic project path.
+        </li>
+        <li>
+          <strong>The regex ceiling on natural-language PII.</strong> Even after we fixed every structural bug, anchored secret patterns, added read-only SQLite discovery (<code>mode=ro&amp;immutable=1</code> so WAL/SHM files never mutate), and passed <code>23/23</code> unit tests, a fresh blind LLM attacker broke both unseen holdout sets in minutes.
+        </li>
+      </ol>
+
+      <div class="callout warning">
+        <div class="callout-title">Observed Failure · Deterministic-Only Holdout Attack (Commit 0b6f5ea)</div>
+        <strong>Holdout A1 (12 local Claude/Codex traces) → <code>reid_risk: Critical</code>.</strong> Recovered participant and advisor names, university and campus room details, an IRB protocol ID, unpublished manuscript titles, provider account/thread IDs, and an email-bearing JWT + OTP.<br /><br />
+        <strong>Holdout A2 (9 public-repo OpenCode/<code>pi</code> traces) → <code>reid_risk: Critical</code>.</strong> Recovered a 17-person Chinese org roster, single-character surname shorthands, a physical street address with local landmarks, and a verbatim published recruitment slogan.
+      </div>
+
+      <p>
+        No amount of regex tuning can tell a workshop participant's first name from a code identifier, or a street address from a test fixture. Conversely, asking an LLM to hand-edit a 5 MB JSONL file fails in the opposite direction: models truncate long logs, break JSON escaping, and miss scattered occurrences.
+      </p>
+    </article>
+
+    <!-- METHOD -->
+    <article class="prose" id="method">
+      <span class="section-tag">03 · Method</span>
+      <h2>The 4-Pass Hybrid Multi-Agent Pipeline</h2>
+      <p>
+        Because <code>clean-session-curate</code> is an <strong>agent skill</strong>, we stopped treating it like a standalone regex CLI. Instead, we drew a clean boundary: <strong>deterministic code owns every file write and AST walk</strong>, while <strong>read-only agents own semantic discovery and adversarial verification</strong>.
+      </p>
+    </article>
+
+    <!-- Custom Inline SVG Architecture Diagram -->
+    <figure class="figure-wide">
+      <div class="svg-card">
+        <svg viewBox="0 0 920 355" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="4-Pass Hybrid Multi-Agent Pipeline Architecture">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" />
+            </marker>
+            <marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#0F766E" />
+            </marker>
+            <marker id="arrow-crimson" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#B91C1C" />
+            </marker>
+          </defs>
+
+          <!-- Legend -->
+          <rect x="20" y="10" width="12" height="12" rx="3" fill="#F1F5F9" stroke="#334155" stroke-width="1.5" />
+          <text x="38" y="20" font-family="Inter, sans-serif" font-size="11.5" fill="#475569">Deterministic Code (AST / I/O)</text>
+          <rect x="225" y="10" width="12" height="12" rx="3" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.5" />
+          <text x="243" y="20" font-family="Inter, sans-serif" font-size="11.5" fill="#0F766E">Read-Only Agent / Subagent</text>
+          <rect x="425" y="10" width="12" height="12" rx="3" fill="#FEF2F2" stroke="#B91C1C" stroke-width="1.5" />
+          <text x="443" y="20" font-family="Inter, sans-serif" font-size="11.5" fill="#B91C1C">Adversarial Retry Loop</text>
+
+          <!-- Pass 1 -->
+          <rect x="20" y="55" width="185" height="120" rx="10" fill="#F8FAFC" stroke="#334155" stroke-width="1.8" />
+          <text x="34" y="79" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#334155">PASS 1 · CODE</text>
+          <text x="34" y="100" font-family="Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">Deterministic AST Scrub</text>
+          <text x="34" y="121" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Strip UUIDs &amp; metadata</text>
+          <text x="34" y="139" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Mask paths, keys, IPs, SHAs</text>
+          <text x="34" y="157" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Raw SHA-256 untouched</text>
+
+          <!-- Arrow 1->2 -->
+          <line x1="205" y1="115" x2="238" y2="115" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)" />
+
+          <!-- Pass 2 Container -->
+          <rect x="244" y="42" width="232" height="222" rx="12" fill="#F2FBF9" stroke="#0F766E" stroke-width="1.8" stroke-dasharray="5 3" />
+          <text x="258" y="64" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#0F766E">PASS 2 · SHARDED AGENTS</text>
+
+          <!-- Chunker box -->
+          <rect x="258" y="74" width="204" height="44" rx="7" fill="#FFFFFF" stroke="#334155" stroke-width="1.4" />
+          <text x="268" y="93" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600" fill="#18222F">chunk_for_hunter.mjs</text>
+          <text x="268" y="109" font-family="Inter, sans-serif" font-size="11" fill="#4B5563">max(20%, 20 KB) + 10% overlap</text>
+
+          <!-- Parallel Hunters -->
+          <rect x="258" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
+          <text x="266" y="151" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">Hunter 1</text>
+          <text x="266" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_01</text>
+
+          <rect x="329" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
+          <text x="337" y="151" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">Hunter 2</text>
+          <text x="337" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_02</text>
+
+          <rect x="400" y="132" width="62" height="44" rx="6" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4" />
+          <text x="408" y="151" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0F766E">Hunter N</text>
+          <text x="408" y="166" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#0F766E">shard_0N</text>
+
+          <!-- Merger box -->
+          <rect x="258" y="194" width="204" height="56" rx="7" fill="#0F766E" />
+          <text x="270" y="216" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#FFFFFF">1 Merger Agent</text>
+          <text x="270" y="233" font-family="Inter, sans-serif" font-size="11" fill="#CCFBF1">Dedup · unify tags · propagate</text>
+          <text x="270" y="245" font-family="JetBrains Mono, monospace" font-size="10" fill="#99F6E4">→ tmp-redaction-terms.json</text>
+
+          <!-- Internal arrows Pass 2 -->
+          <line x1="289" y1="118" x2="289" y2="129" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="360" y1="118" x2="360" y2="129" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="431" y1="118" x2="431" y2="129" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="289" y1="176" x2="335" y2="191" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="360" y1="176" x2="360" y2="191" stroke="#0F766E" stroke-width="1.3" />
+          <line x1="431" y1="176" x2="385" y2="191" stroke="#0F766E" stroke-width="1.3" />
+
+          <!-- Arrow 2->3 -->
+          <line x1="476" y1="150" x2="509" y2="150" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)" />
+
+          <!-- Pass 3 -->
+          <rect x="515" y="90" width="185" height="120" rx="10" fill="#F8FAFC" stroke="#334155" stroke-width="1.8" />
+          <text x="529" y="114" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#334155">PASS 3 · CODE</text>
+          <text x="529" y="135" font-family="Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">AST --terms Scrub</text>
+          <text x="529" y="156" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Longest-first AST walk</text>
+          <text x="529" y="174" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• ASCII word-boundary guard</text>
+          <text x="529" y="192" font-family="Inter, sans-serif" font-size="11.5" fill="#4B5563">• Delete temp shards/terms</text>
+
+          <!-- Arrow 3->4 -->
+          <line x1="700" y1="150" x2="733" y2="150" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)" />
+
+          <!-- Pass 4 -->
+          <rect x="739" y="82" width="162" height="136" rx="10" fill="#E6F4F1" stroke="#0F766E" stroke-width="2" />
+          <text x="752" y="106" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#0F766E">PASS 4 · GATE</text>
+          <text x="752" y="127" font-family="Inter, sans-serif" font-size="13.5" font-weight="700" fill="#18222F">Fresh Blind Verifier</text>
+          <text x="752" y="148" font-family="Inter, sans-serif" font-size="11.5" fill="#334155">Zero prior context.</text>
+          <text x="752" y="165" font-family="Inter, sans-serif" font-size="11.5" fill="#334155">Checks 0 Crit/High.</text>
+          <rect x="752" y="180" width="136" height="26" rx="5" fill="#0F766E" />
+          <text x="766" y="197" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600" fill="#FFFFFF">PASS → ZIP Ready</text>
+
+          <!-- Feedback loop arrow -->
+          <path d="M 820 218 L 820 315 L 360 315 L 360 270" fill="none" stroke="#B91C1C" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrow-crimson)" />
+          <rect x="495" y="299" width="235" height="28" rx="14" fill="#FEF2F2" stroke="#FECACA" stroke-width="1.2" />
+          <text x="510" y="317" font-family="Inter, sans-serif" font-size="11.5" font-weight="600" fill="#B91C1C">Any Critical/High? Feed back to Pass 2</text>
+        </svg>
+      </div>
+      <figcaption class="figure-caption">
+        <strong>Figure 2 — Separation of Concerns.</strong> Deterministic scripts (slate) perform all JSONL parsing and replacement; read-only agents (teal) only read bounded text and return structured JSON verdicts or term lists.
+      </figcaption>
+    </figure>
+
+    <article class="prose">
+      <h3>Three Design Decisions That Actually Moved the Needle</h3>
+      <ul>
+        <li>
+          <strong>Sharding Pass 2 into <code>max(20%, 20 KB)</code> slices with <code>10%</code> overlap.</strong> In our first hybrid prototype (Holdout A1 &amp; A2), a single Privacy Hunter scanning megabytes of JSONL missed subtle clues buried in noise—forcing 2 to 4 retry loops with the Blind Verifier. Our chunker (<code>scripts/chunk_for_hunter.mjs</code>) slices the Pass-1 corpus into bounded overlapping shards (including splitting giant single JSONL lines) so every parallel Hunter keeps sharp attention and no entity spanning a boundary is lost. One <strong>Merger agent</strong> then deduplicates overlapping terms and propagates cross-shard shorthands.
+        </li>
+        <li>
+          <strong>ASCII alphanumeric boundary guards on <code>--terms</code>.</strong> When an agent flags a short identifier like <code>PSU</code> or <code>Erie</code>, naive substring replacement silently corrupts <code>capsule</code> and <code>experience</code>. In <code>anonymize_session.mjs</code>, any <code>--terms</code> literal starting or ending with <code>[A-Za-z0-9]</code> is automatically wrapped in <code>(?&lt;![A-Za-z0-9])...(?![A-Za-z0-9])</code>, while CJK strings still match cleanly inside unspaced Chinese sentences.
+        </li>
+        <li>
+          <strong>A fresh blind verifier as a hard packaging gate.</strong> Pass 4 spawns a brand-new read-only verifier with zero memory of Passes 1–3. Once loud leaks (full names, rosters, tokens) are gone, second-order clues that were invisible in noise—like a single Chinese surname or a regex bucket alternation—stand out immediately.
+        </li>
+      </ul>
+    </article>
+
+    <figure class="figure-wide">
+      <div class="figure-frame">
+        <img src="images/sharded-hunters.jpg" alt="Editorial illustration of a data ribbon sliced into six overlapping translucent panels inspected by parallel geometric lens nodes converging into a central crystalline merger hub." />
+        <figcaption class="figure-caption">
+          <strong>Figure 3 — Sharded Multi-Agent Hunting + Merger.</strong> On Holdout #3 (5.76 MB), six parallel Hunter agents each reviewed a 1.15 MB slice with 115 KB boundary overlap, extracting 222 raw candidates that one Merger agent consolidated into 180 clean, longest-first redaction terms.
+        </figcaption>
+      </div>
+    </figure>
+
+    <!-- RESULTS -->
+    <article class="prose" id="results">
+      <span class="section-tag">04 · Results</span>
+      <h2>Empirical Progression and an Uncontaminated Holdout Check</h2>
+      <p>
+        A common trap in adversarial engineering is accidentally turning your holdout set into a second dev set. We fell into that trap honestly—and caught it before claiming victory.
+      </p>
+
+      <div class="callout note">
+        <div class="callout-title">Why We Built Holdout #3 (Zero-Contamination Protocol)</div>
+        Once we inspected Holdout A1 and A2 failures to add deterministic rules (<code>session-owner</code>, provider <code>user-</code>/<code>thread_</code> IDs, <code>commit:</code> short SHAs) and Hunter checklist hints, A1 and A2 were no longer untouched blind tests. To prove the architecture generalizes without overfitting, we <strong>froze the skill at commit <code>b80590d</code> (26/26 tests)</strong> before sampling <strong>Holdout #3</strong> from 6 completely disjoint local projects—and ran it one-shot with zero edits allowed.
+      </div>
+    </article>
+
+    <!-- Results Progression Visual Chart (SVG) -->
+    <figure class="figure-wide">
+      <div class="svg-card">
+        <svg viewBox="0 0 920 275" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Progression of Blind Verifier Risk and Loops Needed Across Skill Iterations">
+          <text x="24" y="28" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#18222F">Blind-Verifier Outcome Across Iterations (Lower Risk &amp; Fewer Loops = Better)</text>
+          <text x="24" y="46" font-family="Inter, sans-serif" font-size="12" fill="#6B7280">Comparing deterministic-only scrubbing, single-hunter hybrid, and frozen sharded multi-agent on unseen holdouts</text>
+
+          <!-- Baseline bar -->
+          <text x="24" y="88" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">Deterministic Only (0b6f5ea)</text>
+          <text x="24" y="104" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6B7280">Holdout A1 &amp; A2 · 23/23 tests</text>
+          <rect x="250" y="72" width="560" height="32" rx="6" fill="#FEE2E2" stroke="#EF4444" stroke-width="1.5" />
+          <text x="266" y="93" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#B91C1C">FAIL · CRITICAL RE-ID RISK (Both Holdouts)</text>
+
+          <!-- Single Hunter A1 -->
+          <text x="24" y="144" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">Hybrid Single-Hunter (33662da)</text>
+          <text x="24" y="160" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6B7280">Holdout A1 (12 traces) · 2 loops</text>
+          <rect x="250" y="128" width="210" height="32" rx="6" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5" />
+          <text x="264" y="149" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="#92400E">PASS (Low) · 2 Loops</text>
+
+          <!-- Single Hunter A2 -->
+          <text x="24" y="200" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#18222F">Hybrid Single-Hunter (33662da)</text>
+          <text x="24" y="216" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6B7280">Holdout A2 (9 traces) · 4 loops</text>
+          <rect x="250" y="184" width="330" height="32" rx="6" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5" />
+          <text x="264" y="205" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="#92400E">PASS (None, 0 findings) · 4 Loops</text>
+
+          <!-- Frozen Sharded Holdout #3 -->
+          <text x="24" y="254" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#0F766E">Frozen Sharded Multi-Agent (b80590d)</text>
+          <text x="24" y="270" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#0F766E">Holdout #3 (5.76 MB, 6 unseen repos)</text>
+          <rect x="250" y="238" width="120" height="32" rx="6" fill="#0F766E" />
+          <text x="264" y="259" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="#FFFFFF">1st SHOT</text>
+          <text x="384" y="259" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#0F766E">PASS (Low) · 0 Crit / 0 High / 0 Med · 1 Loop</text>
+        </svg>
+      </div>
+    </figure>
+
+    <!-- Full Evidence Table -->
+    <div class="table-wrap">
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Stage / Commit</th>
+              <th>Corpus</th>
+              <th>Pipeline Mode</th>
+              <th>Blind Verifier Result</th>
+              <th>Utility &amp; Integrity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Phase 1 Baseline</strong><br /><code>e0edc8f</code></td>
+              <td>Track B0 + 20 public traces</td>
+              <td>Original baseline (19/19 tests)</td>
+              <td><span class="badge fail">FAIL</span> 51/55 fragment leaks · 0/3 OpenCode v2</td>
+              <td>40% max benign FPR</td>
+            </tr>
+            <tr>
+              <td><strong>Phase 1 Hardened</strong><br /><code>cf7b8c6</code></td>
+              <td>Track B0 + 20 public traces</td>
+              <td>AST scrubber + SQLite <code>ro&amp;immutable=1</code></td>
+              <td><span class="badge pass">PASS</span> 0/63 fragment leaks · 3/3 OpenCode v2</td>
+              <td>0% benign FPR · mean TUS 4.55/5</td>
+            </tr>
+            <tr>
+              <td><strong>Phase 2 Deterministic</strong><br /><code>0b6f5ea</code></td>
+              <td>Holdout A1 (12 local) &amp; A2 (9 public)</td>
+              <td>Deterministic only (23/23 tests)</td>
+              <td><span class="badge fail">FAIL</span> <strong>Critical</strong> on both A1 and A2</td>
+              <td>0 invalid JSON lines</td>
+            </tr>
+            <tr>
+              <td><strong>Hybrid Single-Hunter</strong><br /><code>33662da</code></td>
+              <td>Holdout A1 (12) &amp; A2 (9)</td>
+              <td>4-Pass Hybrid, single Hunter (24/24 tests)</td>
+              <td>
+                A1: <span class="badge pass">PASS</span> Low (2 loops)<br />
+                A2: <span class="badge pass">PASS</span> None, 0 findings (4 loops)
+              </td>
+              <td><code>utility_intact: true</code> · 12/12 SHA-256 unchanged</td>
+            </tr>
+            <tr class="highlight-row">
+              <td><strong>Frozen Sharded Multi-Agent</strong><br /><code>b80590d</code> <span class="badge frozen">FROZEN</span></td>
+              <td><strong>Holdout #3</strong>: 10 brand-new local traces (5.76 MB, 6 disjoint projects)</td>
+              <td>6 parallel Hunters (<code>max(20%, 20 KB)</code> + 10% overlap) + 1 Merger (26/26 tests)</td>
+              <td>
+                Claude (4): <span class="badge pass">1st-SHOT PASS</span> Low (0 Crit/High/Med)<br />
+                Codex (6): <span class="badge pass">1st-SHOT PASS</span> Low (0 Crit/High/Med)
+              </td>
+              <td><code>utility_intact: true</code> · 10/10 SHA-256 unchanged · 0 invalid JSON lines</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <article class="prose">
+      <p>
+        On the strictly uncontaminated 5.76 MB Holdout #3 corpus, sharding changed the game. Six parallel Hunter agents inspected <code>1.15 MB</code> shards with <code>115 KB</code> overlap and caught 22 student names, 18 handles, 6 partially masked phone numbers, an IP-bearing <code>sslip.io</code> hostname, a shared artifact URL, and private repo names—all on Pass 2. The Merger agent deduplicated <code>222</code> raw candidates into <code>180</code> clean terms, Pass 3 applied them with zero JSON corruption, and both fresh blind verifiers passed on <strong>Loop 1</strong>. Only minor Low-severity residue remained (opaque API <code>req_</code> IDs, coarse timezone labels, a typo-glued RFC1918 LAN IP, and a 2-character UI truncation).
+      </p>
+    </article>
+
+    <figure class="figure-wide">
+      <div class="figure-frame">
+        <img src="images/blind-gate.jpg" alt="Editorial illustration of a sleek inspection gate scanning a neat stack of anonymized document cards before sealing a luminous teal archive parcel." />
+        <figcaption class="figure-caption">
+          <strong>Figure 4 — Pass 4 Fresh Blind Verification Gate.</strong> No archive is packaged until a brand-new verifier with zero memory of prior passes confirms 0 Critical and 0 High leaks across the exported traces.
+        </figcaption>
+      </div>
+    </figure>
+
+    <!-- LIMITS & TAKEAWAY -->
+    <article class="prose" id="limits">
+      <span class="section-tag">05 · Honest Limits</span>
+      <h2>Where This Architecture Still Has Boundaries</h2>
+      <p>
+        The skill is ready for daily real-world use, and far safer than deterministic scrubbing alone—but three concrete limits remain worth engineering before a broad upstream release:
+      </p>
+    </article>
+
+    <section class="limits-grid" aria-label="Known limitations">
+      <div class="limit-card">
+        <div class="limit-num">LIMIT 01 · SCALING</div>
+        <h4>Giant Exports (&gt;15 MB) Need a Ceiling</h4>
+        <p><code>max(20%, 20 KB)</code> worked cleanly at 5.76 MB (~1.15 MB/shard), but on a 30 MB export, 20% would yield 6 MB shards. Capping shard size at <code>500 KB</code> keeps Hunter recall high at any scale.</p>
+      </div>
+      <div class="limit-card">
+        <div class="limit-num">LIMIT 02 · VERIFIER</div>
+        <h4>Shard Pass 4 Automatically Too</h4>
+        <p>On Holdout #3 we manually split Pass 4 into two verifiers (Claude and Codex) to keep review depth sharp. <code>SKILL.md</code> should reuse <code>chunk_for_hunter.mjs</code> for Pass 4 whenever exports exceed ~1 MB.</p>
+      </div>
+      <div class="limit-card">
+        <div class="limit-num">LIMIT 03 · PORTABILITY</div>
+        <h4>Host-Agent &amp; Windows CI</h4>
+        <p>Pass 1 is pure Node.js 20+ and runs anywhere, but Passes 2 and 4 rely on a host agent that supports subagents (or sequential shard loops). All runs were verified on macOS; Windows CI is still pending.</p>
+      </div>
+    </section>
+
+    <article class="prose">
+      <div class="takeaway">
+        <div class="takeaway-label">Portable Takeaway</div>
+        <p>
+          If you are building privacy tooling inside an agent workflow, don't force regex to understand human prose, and don't let an LLM hand-edit raw logs. Let deterministic code own the AST and file I/O, shard semantic hunting into bounded overlapping chunks so no agent loses focus, and require a fresh blind verifier to sign off before anything gets zipped.
+        </p>
+      </div>
+    </article>
+  </main>
+
+  <footer>
+    <span>Generated from verified experiment artifacts · Commits <code>b80590d</code> &amp; <code>caa73bf</code></span>
+    <span>All personal identifiers sanitized · Zero raw session content included</span>
+  </footer>
+
+  <script>
+    window.addEventListener("scroll", () => {
+      const h = document.documentElement;
+      const pct = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100;
+      document.getElementById("progressBar").style.width = `${Math.min(100, Math.max(0, pct))}%`;
+    });
+  </script>
+</body>
+</html>
